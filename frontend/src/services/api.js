@@ -114,6 +114,11 @@ export const polishText = async (reportId, textToPolish, fullContext) => {
   return response.data
 }
 
+export const addContactToReport = async (reportId) => {
+  const response = await api.post(`/reports/${reportId}/add-contact`)
+  return response.data
+}
+
 // Sample Reports
 export const getSampleReports = async () => {
   const response = await api.get('/sample-reports')

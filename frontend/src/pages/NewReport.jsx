@@ -23,7 +23,6 @@ function NewReport() {
     name: '',
     subject: ''
   })
-  const [includeContact, setIncludeContact] = useState(false)
   const [savingDraft, setSavingDraft] = useState(false)
   const [reminders, setReminders] = useState(null)
   const [loadingReminders, setLoadingReminders] = useState(false)
@@ -152,8 +151,7 @@ function NewReport() {
     try {
       const report = await generateReport({ 
         ...formData, 
-        student_id: studentId,
-        include_contact: includeContact
+        student_id: studentId
       })
       navigate(`/reports/${report.id}/edit`)
     } catch (error) {
@@ -424,22 +422,6 @@ function NewReport() {
             </div>
 
           </div>
-        </div>
-
-        {/* AI Options */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <label className="flex items-center space-x-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includeContact}
-              onChange={(e) => setIncludeContact(e.target.checked)}
-              className="w-4 h-4 text-sage-600 border-gray-300 rounded focus:ring-sage-500"
-            />
-            <div>
-              <span className="text-sm font-medium text-sage-900">Include Contact Information</span>
-              <p className="text-xs text-sage-600">Add phone and email to signature</p>
-            </div>
-          </label>
         </div>
 
         {/* Submit Buttons */}

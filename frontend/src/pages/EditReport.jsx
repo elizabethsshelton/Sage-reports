@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2 } from 'lucide-react'
-import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport } from '../services/api'
+import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2, Contact } from 'lucide-react'
+import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport, addContactToReport } from '../services/api'
 
 function EditReport() {
   const { id } = useParams()
@@ -26,6 +26,7 @@ function EditReport() {
   const [useForTraining, setUseForTraining] = useState(false)
   const [undoStack, setUndoStack] = useState([])
   const [showUndoButton, setShowUndoButton] = useState(false)
+  const [addingContact, setAddingContact] = useState(false)
   const textareaRef = useRef(null)
 
   useEffect(() => {
@@ -290,6 +291,24 @@ function EditReport() {
     }
   }
 
+  const handleAddContact = async () => {
+    setAddingContact(true)
+    try {
+      const result = await addContactToReport(id)
+      setEditedReport(result.report_text)
+      if (result.message) {
+        alert(result.message)
+      } else {
+        alert('Contact information added to report!')
+      }
+    } catch (error) {
+      console.error('Error adding contact info:', error)
+      alert('Error adding contact information. Please check your settings to ensure tutor name is configured.')
+    } finally {
+      setAddingContact(false)
+    }
+  }
+
   const handleCopy = () => {
     navigator.clipboard.writeText(editedReport)
     setCopied(true)
@@ -500,7 +519,7 @@ function EditReport() {
               )}
               
               {/* AI Action Buttons */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <button
                   onClick={handleFixGrammar}
                   disabled={fixingGrammar || saving || regenerating}
@@ -519,6 +538,16 @@ function EditReport() {
                 >
                   <RefreshCw className={`w-4 h-4 mr-2 ${regenerating ? 'animate-spin' : ''}`} />
                   {regenerating ? 'Regenerating...' : 'Regenerate Report'}
+                </button>
+
+                <button
+                  onClick={handleAddContact}
+                  disabled={addingContact || saving}
+                  className="px-6 py-2.5 bg-teal-50 text-teal-700 font-medium rounded-xl hover:bg-teal-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-teal-200"
+                  title="Add your contact information to the report"
+                >
+                  <Contact className="w-4 h-4 mr-2" />
+                  {addingContact ? 'Adding...' : 'Add Contact Info'}
                 </button>
               </div>
               

@@ -519,6 +519,57 @@ def polish_report_text(report_id):
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/api/reports/<int:report_id>/add-contact', methods=['POST'])
+def add_contact_to_report(report_id):
+    """Add contact information to an existing report"""
+    session_db = get_session(DB_PATH)
+    
+    try:
+        report = session_db.query(Report).filter(Report.id == report_id).first()
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        # Get current report text
+        current_report = report.final_report or report.ai_generated_report or ''
+        
+        # Get settings for contact info
+        settings = session_db.query(UserSettings).first()
+        if not settings:
+            return jsonify({'error': 'Settings not configured'}), 400
+        
+        tutor_name = settings.tutor_name
+        tutor_phone = settings.tutor_phone
+        tutor_email = settings.tutor_email
+        
+        if not tutor_name:
+            return jsonify({'error': 'Tutor name not configured in settings'}), 400
+        
+        # Build signature with contact info
+        signature = f"Best,\n{tutor_name}"
+        if tutor_phone:
+            signature += f"\n{tutor_phone}"
+        if tutor_email:
+            signature += f"\n{tutor_email}"
+        
+        # Check if signature already exists
+        if signature in current_report:
+            return jsonify({'report_text': current_report, 'message': 'Contact info already present'}), 200
+        
+        # Remove any existing signature (Best, [name] pattern)
+        import re
+        # Match "Best," followed by optional whitespace and a name
+        current_report = re.sub(r'\n*Best,\n[^\n]+(?:\n[^\n]+)*$', '', current_report).strip()
+        
+        # Add signature with contact info
+        updated_report = current_report + "\n\n" + signature
+        
+        return jsonify({'report_text': updated_report}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+    finally:
+        session_db.close()
+
+
 @app.route('/api/reports/reminders/<int:student_id>', methods=['GET'])
 def get_session_reminders(student_id):
     """Get reminders from the most recent report for a student"""
