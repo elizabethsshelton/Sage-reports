@@ -1064,6 +1064,14 @@ function Calendar() {
                   })
                 }
                 
+                // If session has a report, update the report's session_date too
+                if (selectedSession.reportId) {
+                  await updateReport(selectedSession.reportId, {
+                    session_date: newDateTime,
+                    duration_hours: newDuration
+                  })
+                }
+                
                 setShowEditModal(false)
                 await loadData()
               } catch (error) {
