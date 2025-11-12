@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, FileText, ChevronLeft, ChevronRight, Clock, X, Edit, Trash2, MoreVertical, Users } from 'lucide-react'
-import { getStudents, getReports, getCalendarSessions, createCalendarSession, updateCalendarSession, deleteCalendarSession, createStudent } from '../services/api'
+import { getStudents, getReports, getCalendarSessions, createCalendarSession, updateCalendarSession, deleteCalendarSession, createStudent, updateReport } from '../services/api'
 
 function Calendar() {
   const navigate = useNavigate()
@@ -192,7 +192,16 @@ function Calendar() {
         
         // If student has a session this week, check for reminders from most recent report
         if (hasSessionThisWeek) {
-          const studentReports = reportsData.filter(r => r.student_id === student.id && r.next_session_notes)
+          // Filter to reports from the last 60 days
+          const sixtyDaysAgo = new Date()
+          sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
+          
+          const studentReports = reportsData
+            .filter(r => 
+              r.student_id === student.id && 
+              r.next_session_notes &&
+              new Date(r.session_date) >= sixtyDaysAgo
+            )
             .sort((a, b) => new Date(b.session_date) - new Date(a.session_date))
           
           if (studentReports.length > 0 && studentReports[0].next_session_notes) {
@@ -201,7 +210,9 @@ function Calendar() {
               student_id: student.id,
               session_day: sessionDay,
               reminders: studentReports[0].next_session_notes,
-              subject: student.subject
+              subject: student.subject,
+              report_id: studentReports[0].id,
+              report_date: studentReports[0].session_date
             })
           }
         }
@@ -469,6 +480,21 @@ function Calendar() {
     setShowAddModal(true)
   }
 
+  const handleClearReminder = async (reportId) => {
+    if (!window.confirm('Clear these reminders? They will be removed from the report.')) {
+      return
+    }
+    
+    try {
+      await updateReport(reportId, { next_session_notes: '' })
+      // Reload data to refresh reminders
+      loadData()
+    } catch (error) {
+      console.error('Error clearing reminder:', error)
+      alert('Error clearing reminder. Please try again.')
+    }
+  }
+
   const isToday = (date) => {
     const today = new Date()
     return date.toDateString() === today.toDateString()
@@ -560,8 +586,17 @@ function Calendar() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {upcomingReminders.map((reminder, idx) => (
-              <div key={idx} className="bg-white border border-amber-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-2">
+              <div key={idx} className="bg-white border border-amber-200 rounded-lg p-4 hover:shadow-md transition-shadow relative">
+                {/* Clear Button */}
+                <button
+                  onClick={() => handleClearReminder(reminder.report_id)}
+                  className="absolute top-2 right-2 p-1 text-amber-600 hover:text-amber-800 hover:bg-amber-100 rounded transition-colors"
+                  title="Clear this reminder"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                
+                <div className="flex items-start justify-between mb-2 pr-6">
                   <div className="flex-1">
                     <p className="font-semibold text-sage-900">{reminder.student_name}</p>
                     {reminder.subject && (
@@ -572,6 +607,16 @@ function Calendar() {
                     {reminder.session_day}
                   </span>
                 </div>
+                
+                {/* Reminder Date */}
+                <p className="text-xs text-sage-500 mb-2">
+                  From report: {new Date(reminder.report_date).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </p>
+                
                 <div className="mt-2 text-sm text-sage-700 whitespace-pre-wrap">
                   {reminder.reminders}
                 </div>
