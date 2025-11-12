@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Calendar as CalendarIcon, Plus, FileText, ChevronLeft, ChevronRight, Clock, X, Edit, Trash2, MoreVertical } from 'lucide-react'
-import { getStudents, getReports, getCalendarSessions, createCalendarSession, updateCalendarSession, deleteCalendarSession, createStudent } from '../services/api'
+import { Calendar as CalendarIcon, Plus, FileText, ChevronLeft, ChevronRight, Clock, X, Edit, Trash2, MoreVertical, Users, BookOpen } from 'lucide-react'
+import { getStudents, getReports, getCalendarSessions, createCalendarSession, updateCalendarSession, deleteCalendarSession, createStudent, getStats } from '../services/api'
 
 function Calendar() {
   const navigate = useNavigate()
   const [students, setStudents] = useState([])
   const [reports, setReports] = useState([])
   const [calendarSessions, setCalendarSessions] = useState([])
+  const [stats, setStats] = useState(null)
+  const [weekSubjects, setWeekSubjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentWeek, setCurrentWeek] = useState(0) // 0 = this week, 1 = next week, -1 = last week
   const [showAddModal, setShowAddModal] = useState(false)
@@ -26,22 +28,104 @@ function Calendar() {
       const startDate = weekDates[0].toISOString()
       const endDate = weekDates[6].toISOString()
       
-      const [activeStudentsData, allStudentsData, reportsData, sessionsData] = await Promise.all([
+      const [activeStudentsData, allStudentsData, reportsData, sessionsData, statsData] = await Promise.all([
         getStudents(true),  // Active students for recurring schedule
         getStudents(false), // All students for report matching
         getReports(),
-        getCalendarSessions(startDate, endDate)
+        getCalendarSessions(startDate, endDate),
+        getStats()
       ])
       setStudents(activeStudentsData)  // For recurring schedules
       setReports(reportsData)
       setCalendarSessions(sessionsData)
+      setStats(statsData)
       
       // Store all students for report lookups
       window.allStudents = allStudentsData
+      
+      // Load week subjects for sticky note
+      loadWeekSubjects(activeStudentsData, sessionsData)
     } catch (error) {
       console.error('Error loading calendar data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  const loadWeekSubjects = (studentsList, calendarSessionsList) => {
+    try {
+      // Get dates for the current actual week (not the viewed week)
+      const today = new Date()
+      const currentDay = today.getDay()
+      const sunday = new Date(today)
+      sunday.setDate(today.getDate() - currentDay)
+      sunday.setHours(0, 0, 0, 0)
+      
+      const saturday = new Date(sunday)
+      saturday.setDate(sunday.getDate() + 6)
+      saturday.setHours(23, 59, 59, 999)
+      
+      // Build week structure
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      const weekData = []
+      
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(sunday)
+        date.setDate(sunday.getDate() + i)
+        const dateStr = date.toISOString().split('T')[0]
+        
+        const daySubjectsMap = new Map()
+        
+        // Check recurring sessions for this day
+        studentsList.forEach(student => {
+          if (student.recurring_schedule && student.subject) {
+            const schedule = student.recurring_schedule.toLowerCase()
+            const dayName = dayNames[i].toLowerCase()
+            
+            if (schedule.includes(dayName.substring(0, 3)) || schedule.includes(dayName)) {
+              const override = calendarSessionsList.find(cs =>
+                cs.student_id === student.id &&
+                cs.session_date?.startsWith(dateStr) &&
+                cs.is_one_time === false
+              )
+              
+              if (!override || (override.status !== 'cancelled' && override.status !== 'deleted')) {
+                const normalized = student.subject.trim().toLowerCase()
+                if (!daySubjectsMap.has(normalized)) {
+                  daySubjectsMap.set(normalized, student.subject.trim())
+                }
+              }
+            }
+          }
+        })
+        
+        // Add one-time sessions
+        calendarSessionsList.forEach(cs => {
+          if (cs.is_one_time && cs.session_date?.startsWith(dateStr)) {
+            if (cs.status !== 'cancelled' && cs.status !== 'deleted') {
+              const student = studentsList.find(s => s.id === cs.student_id)
+              if (student && student.subject) {
+                const normalized = student.subject.trim().toLowerCase()
+                if (!daySubjectsMap.has(normalized)) {
+                  daySubjectsMap.set(normalized, student.subject.trim())
+                }
+              }
+            }
+          }
+        })
+        
+        if (daySubjectsMap.size > 0) {
+          weekData.push({
+            dayName: dayNames[i],
+            date: date,
+            subjects: Array.from(daySubjectsMap.values()).sort()
+          })
+        }
+      }
+      
+      setWeekSubjects(weekData)
+    } catch (error) {
+      console.error('Error loading week subjects:', error)
     }
   }
   
@@ -309,19 +393,115 @@ function Calendar() {
   }
 
   if (loading) {
-    return <div className="text-center py-12">Loading calendar...</div>
+    return <div className="text-center py-12">Loading...</div>
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-sage-800">Session Calendar</h2>
-          <p className="text-sage-600 mt-1">
-            View your weekly schedule and track which sessions need reports
-          </p>
+    <div className="relative">
+      {/* This Week's Subjects - Sticky Note Style */}
+      {weekSubjects.length > 0 && (
+        <div className="absolute top-0 right-0 w-80 bg-gray-50 rounded-lg shadow-sm border border-gray-300 p-3 max-h-48 overflow-y-auto z-10">
+          <h3 className="text-xs font-semibold text-gray-700 mb-2 sticky top-0 bg-gray-50 pb-1">
+            This Week's Subjects
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {weekSubjects.map((day, idx) => {
+              const isToday = new Date().toDateString() === day.date.toDateString()
+              const isPast = day.date < new Date(new Date().setHours(0, 0, 0, 0))
+              
+              if (isPast) return null
+              
+              return (
+                <div key={idx} className="text-xs">
+                  <p className={`font-semibold ${isToday ? 'text-sage-900' : 'text-gray-700'}`}>
+                    {isToday ? '→ ' : ''}{day.dayName.substring(0, 3)}
+                  </p>
+                  <div className="space-y-0.5 text-gray-600">
+                    {day.subjects.map((subject, subIdx) => (
+                      <p key={subIdx}>• {subject}</p>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
+      )}
+
+      {/* Welcome Section */}
+      <div className="mb-8 animate-fade-in">
+        <h2 className="text-4xl font-bold text-sage-900 mb-3 tracking-tight">
+          Welcome to Sage Reports
+        </h2>
+        <p className="text-lg text-sage-600">
+          Your AI-powered tutoring report assistant
+        </p>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-10 flex gap-4">
+        <Link
+          to="/reports/new"
+          className="inline-flex items-center px-8 py-3.5 bg-sage-600 text-white font-semibold rounded-xl hover:bg-sage-700 transition-smooth hover-lift shadow-md hover:shadow-lg"
+        >
+          <Plus className="w-5 h-5 mr-2.5" />
+          Write New Report
+        </Link>
+        <Link
+          to="/students"
+          className="inline-flex items-center px-8 py-3.5 bg-white border-2 border-sage-600 text-sage-700 font-semibold rounded-xl hover:bg-sage-50 transition-smooth hover-lift shadow-sm"
+        >
+          <Users className="w-5 h-5 mr-2.5" />
+          Manage Students
+        </Link>
+        <Link
+          to="/reports"
+          className="inline-flex items-center px-8 py-3.5 bg-white border-2 border-sage-600 text-sage-700 font-semibold rounded-xl hover:bg-sage-50 transition-smooth hover-lift shadow-sm"
+        >
+          <FileText className="w-5 h-5 mr-2.5" />
+          View Reports
+        </Link>
+      </div>
+
+      {/* Stats Overview */}
+      {stats && (
+        <div className="grid grid-cols-3 gap-6 mb-10">
+          <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-sage-600">Total Students</p>
+                <p className="text-3xl font-bold text-sage-900 mt-1">{stats.total_students}</p>
+              </div>
+              <Users className="w-10 h-10 text-sage-400" />
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-sage-600">Total Reports</p>
+                <p className="text-3xl font-bold text-sage-900 mt-1">{stats.total_reports}</p>
+              </div>
+              <FileText className="w-10 h-10 text-sage-400" />
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-sage-600">Sample Reports</p>
+                <p className="text-3xl font-bold text-sage-900 mt-1">{stats.total_samples}</p>
+              </div>
+              <BookOpen className="w-10 h-10 text-sage-400" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calendar Section Header */}
+      <div className="mb-6">
+        <h3 className="text-2xl font-bold text-sage-800">Session Calendar</h3>
+        <p className="text-sage-600 mt-1">
+          View your weekly schedule and track which sessions need reports
+        </p>
       </div>
 
       {/* Week Navigation */}

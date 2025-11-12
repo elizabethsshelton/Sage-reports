@@ -5,9 +5,8 @@ function Layout({ apiStatus }) {
   const location = useLocation()
 
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: Home },
+    { path: '/', label: 'Home', icon: Home },
     { path: '/students', label: 'Students', icon: Users },
-    { path: '/calendar', label: 'Calendar', icon: Calendar },
     { path: '/reports', label: 'Reports', icon: FileText },
     { path: '/settings', label: 'Settings', icon: Settings },
   ]

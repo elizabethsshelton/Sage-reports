@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
-import Dashboard from './pages/Dashboard'
 import Students from './pages/Students'
 import Reports from './pages/Reports'
 import Calendar from './pages/Calendar'
@@ -38,9 +37,8 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Layout apiStatus={apiStatus} />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<Calendar />} />
           <Route path="students" element={<Students />} />
-          <Route path="calendar" element={<Calendar />} />
           <Route path="reports" element={<Reports />} />
           <Route path="reports/new" element={<NewReport />} />
           <Route path="reports/:id/edit" element={<EditReport />} />
