@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Calendar as CalendarIcon, Plus, FileText, ChevronLeft, ChevronRight, Clock, X, Edit, Trash2, MoreVertical, Users, BookOpen } from 'lucide-react'
-import { getStudents, getReports, getCalendarSessions, createCalendarSession, updateCalendarSession, deleteCalendarSession, createStudent, getStats } from '../services/api'
+import { Plus, FileText, ChevronLeft, ChevronRight, Clock, X, Edit, Trash2, MoreVertical, Users } from 'lucide-react'
+import { getStudents, getReports, getCalendarSessions, createCalendarSession, updateCalendarSession, deleteCalendarSession, createStudent } from '../services/api'
 
 function Calendar() {
   const navigate = useNavigate()
   const [students, setStudents] = useState([])
   const [reports, setReports] = useState([])
   const [calendarSessions, setCalendarSessions] = useState([])
-  const [stats, setStats] = useState(null)
   const [weekSubjects, setWeekSubjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentWeek, setCurrentWeek] = useState(0) // 0 = this week, 1 = next week, -1 = last week
@@ -28,17 +27,15 @@ function Calendar() {
       const startDate = weekDates[0].toISOString()
       const endDate = weekDates[6].toISOString()
       
-      const [activeStudentsData, allStudentsData, reportsData, sessionsData, statsData] = await Promise.all([
+      const [activeStudentsData, allStudentsData, reportsData, sessionsData] = await Promise.all([
         getStudents(true),  // Active students for recurring schedule
         getStudents(false), // All students for report matching
         getReports(),
-        getCalendarSessions(startDate, endDate),
-        getStats()
+        getCalendarSessions(startDate, endDate)
       ])
       setStudents(activeStudentsData)  // For recurring schedules
       setReports(reportsData)
       setCalendarSessions(sessionsData)
-      setStats(statsData)
       
       // Store all students for report lookups
       window.allStudents = allStudentsData
@@ -462,39 +459,6 @@ function Calendar() {
           View Reports
         </Link>
       </div>
-
-      {/* Stats Overview */}
-      {stats && (
-        <div className="grid grid-cols-3 gap-6 mb-10">
-          <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-sage-600">Total Students</p>
-                <p className="text-3xl font-bold text-sage-900 mt-1">{stats.total_students}</p>
-              </div>
-              <Users className="w-10 h-10 text-sage-400" />
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-sage-600">Total Reports</p>
-                <p className="text-3xl font-bold text-sage-900 mt-1">{stats.total_reports}</p>
-              </div>
-              <FileText className="w-10 h-10 text-sage-400" />
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-sage-600">Sample Reports</p>
-                <p className="text-3xl font-bold text-sage-900 mt-1">{stats.total_samples}</p>
-              </div>
-              <BookOpen className="w-10 h-10 text-sage-400" />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Calendar Section Header */}
       <div className="mb-6">
