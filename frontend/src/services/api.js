@@ -119,6 +119,13 @@ export const addContactToReport = async (reportId) => {
   return response.data
 }
 
+export const suggestOpeningClosing = async (reportId, sentenceType) => {
+  const response = await api.post(`/reports/${reportId}/suggest-opening-closing`, { 
+    type: sentenceType  // 'opening' or 'closing'
+  })
+  return response.data
+}
+
 // Sample Reports
 export const getSampleReports = async () => {
   const response = await api.get('/sample-reports')

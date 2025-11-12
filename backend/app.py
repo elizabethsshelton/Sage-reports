@@ -519,6 +519,80 @@ def polish_report_text(report_id):
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/api/reports/<int:report_id>/suggest-opening-closing', methods=['POST'])
+def suggest_opening_closing_sentences(report_id):
+    """Generate opening or closing sentence suggestions"""
+    data = request.json
+    session_db = get_session(DB_PATH)
+    
+    try:
+        report = session_db.query(Report).filter(Report.id == report_id).first()
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        student = session_db.query(Student).filter(Student.id == report.student_id).first()
+        if not student:
+            return jsonify({'error': 'Student not found'}), 404
+        
+        sentence_type = data.get('type', 'opening')  # 'opening' or 'closing'
+        
+        # Get previous reports for this student
+        previous_reports = session_db.query(Report)\
+            .filter(Report.student_id == report.student_id)\
+            .filter(Report.id != report_id)\
+            .filter(Report.use_for_training == True)\
+            .order_by(Report.session_date.desc())\
+            .limit(15)\
+            .all()
+        
+        # Extract the text from previous reports
+        previous_texts = []
+        for prev_report in previous_reports:
+            text = prev_report.final_report or prev_report.ai_generated_report
+            if text:
+                previous_texts.append(text)
+        
+        # Get current report's opening/closing for reference
+        current_text = report.final_report or report.ai_generated_report or ''
+        current_sentence = ""
+        if current_text:
+            if sentence_type == 'opening':
+                current_sentence = current_text.split('.')[0] + '.' if '.' in current_text else current_text[:100]
+            else:
+                sentences = current_text.strip().split('.')
+                current_sentence = sentences[-2] + '.' if len(sentences) > 1 else sentences[-1]
+        
+        # Get previous report's sentence for reference
+        previous_sentence = ""
+        if previous_texts:
+            prev_text = previous_texts[0]
+            if sentence_type == 'opening':
+                previous_sentence = prev_text.split('.')[0] + '.' if '.' in prev_text else prev_text[:100]
+            else:
+                sentences = prev_text.strip().split('.')
+                previous_sentence = sentences[-2] + '.' if len(sentences) > 1 else sentences[-1]
+        
+        # Generate suggestions
+        suggestions = ai_service.suggest_opening_closing(
+            student_name=student.name,
+            previous_reports=previous_texts,
+            sentence_type=sentence_type
+        )
+        
+        return jsonify({
+            'suggestions': suggestions,
+            'current_sentence': current_sentence.strip(),
+            'previous_sentence': previous_sentence.strip()
+        }), 200
+    except Exception as e:
+        print(f"Error in suggest_opening_closing_sentences: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 400
+    finally:
+        session_db.close()
+
+
 @app.route('/api/reports/<int:report_id>/add-contact', methods=['POST'])
 def add_contact_to_report(report_id):
     """Add contact information to an existing report"""

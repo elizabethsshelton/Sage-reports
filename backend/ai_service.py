@@ -461,6 +461,118 @@ Return ONLY a JSON array of 4 sentences, nothing else:
             traceback.print_exc()
             return []
     
+    def suggest_opening_closing(self, student_name: str, previous_reports: List[str], sentence_type: str) -> List[str]:
+        """Generate opening or closing sentence suggestions based on previous reports"""
+        
+        if not self.client:
+            return []
+        
+        # Extract opening/closing sentences from previous reports for examples
+        examples = []
+        for report in previous_reports[:10]:  # Use up to 10 most recent
+            if sentence_type == 'opening':
+                # Get first sentence
+                first_sentence = report.split('.')[0] + '.' if '.' in report else report[:100]
+                examples.append(first_sentence.strip())
+            else:  # closing
+                # Get last sentence
+                sentences = report.strip().split('.')
+                last_sentence = sentences[-2] + '.' if len(sentences) > 1 else sentences[-1]
+                examples.append(last_sentence.strip())
+        
+        examples_text = "\n".join([f"- {ex}" for ex in examples[:8]]) if examples else "No previous examples"
+        
+        if sentence_type == 'opening':
+            prompt = f"""You are helping a tutor write varied opening sentences for session reports about {student_name}.
+
+Here are opening sentences you've used in past reports:
+{examples_text}
+
+Generate 5 DIFFERENT opening sentences that:
+- Are warm and welcoming
+- Vary in style (not always "It was great to see...")
+- Sound natural and conversational
+- Are appropriate for a tutoring session report
+- Use regular hyphens (-) NOT em dashes (—)
+
+Examples of varied openings:
+- "It was wonderful working with [name] today!"
+- "[Name] and I had a productive session today."
+- "I always enjoy my time with [name]!"
+- "Today's session with [name] went really well."
+- "[Name] came ready to work today!"
+
+Return ONLY a JSON array of 5 opening sentences, nothing else."""
+        else:  # closing
+            prompt = f"""You are helping a tutor write varied closing sentences for session reports about {student_name}.
+
+Here are closing sentences you've used in past reports:
+{examples_text}
+
+Generate 5 DIFFERENT closing sentences that:
+- Are positive and encouraging
+- Vary in style and tone
+- Sound natural and conversational
+- Are appropriate for ending a tutoring session report
+- Use regular hyphens (-) NOT em dashes (—)
+
+Examples of varied closings:
+- "Looking forward to our next session!"
+- "Great work today, and I'll see you next time!"
+- "I'm excited to continue this work with [name]!"
+- "Can't wait to see the progress next week!"
+- "Keep up the excellent effort!"
+
+Return ONLY a JSON array of 5 closing sentences, nothing else."""
+
+        try:
+            if self.provider == 'openai':
+                response = self.client.chat.completions.create(
+                    model='gpt-4o-mini',
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.8,
+                    max_tokens=400
+                )
+                result = response.choices[0].message.content.strip()
+            
+            elif self.provider == 'anthropic':
+                response = self.client.messages.create(
+                    model='claude-3-5-sonnet-20241022',
+                    max_tokens=400,
+                    temperature=0.8,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                result = response.content[0].text.strip()
+            
+            else:
+                return []
+            
+            # Parse JSON response
+            import json
+            # Clean up the response
+            result = result.strip()
+            if result.startswith('```json'):
+                result = result[7:]
+            if result.startswith('```'):
+                result = result[3:]
+            if result.endswith('```'):
+                result = result[:-3]
+            result = result.strip()
+            
+            sentences = json.loads(result)
+            
+            # Validate and return
+            if isinstance(sentences, list) and len(sentences) > 0:
+                return [str(s).replace('{student_name}', student_name).replace('[name]', student_name) for s in sentences]
+            else:
+                return []
+        
+        except Exception as e:
+            print(f"Error generating opening/closing suggestions: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
     def polish_text(self, text_to_polish: str, full_context: str = "") -> str:
         """Improve a selected portion of text while keeping the same meaning"""
         

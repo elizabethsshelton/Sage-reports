@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2, Contact } from 'lucide-react'
-import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport, addContactToReport } from '../services/api'
+import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport, addContactToReport, suggestOpeningClosing } from '../services/api'
 
 function EditReport() {
   const { id } = useParams()
@@ -27,6 +27,16 @@ function EditReport() {
   const [undoStack, setUndoStack] = useState([])
   const [showUndoButton, setShowUndoButton] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
+  const [showOpeningTool, setShowOpeningTool] = useState(false)
+  const [showClosingTool, setShowClosingTool] = useState(false)
+  const [openingSuggestions, setOpeningSuggestions] = useState([])
+  const [closingSuggestions, setClosingSuggestions] = useState([])
+  const [loadingOpeningSuggestions, setLoadingOpeningSuggestions] = useState(false)
+  const [loadingClosingSuggestions, setLoadingClosingSuggestions] = useState(false)
+  const [currentOpening, setCurrentOpening] = useState('')
+  const [currentClosing, setCurrentClosing] = useState('')
+  const [previousOpening, setPreviousOpening] = useState('')
+  const [previousClosing, setPreviousClosing] = useState('')
   const textareaRef = useRef(null)
 
   useEffect(() => {
@@ -309,6 +319,54 @@ function EditReport() {
     }
   }
 
+  const handleLoadOpeningClosingSuggestions = async (type) => {
+    const isOpening = type === 'opening'
+    const setLoading = isOpening ? setLoadingOpeningSuggestions : setLoadingClosingSuggestions
+    const setSuggestions = isOpening ? setOpeningSuggestions : setClosingSuggestions
+    
+    setLoading(true)
+    try {
+      const result = await suggestOpeningClosing(id, type)
+      setSuggestions(result.suggestions || [])
+      if (isOpening) {
+        setCurrentOpening(result.current_sentence || '')
+        setPreviousOpening(result.previous_sentence || '')
+      } else {
+        setCurrentClosing(result.current_sentence || '')
+        setPreviousClosing(result.previous_sentence || '')
+      }
+    } catch (error) {
+      console.error(`Error loading ${type} suggestions:`, error)
+      alert(`Error loading suggestions. Please try again.`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleApplyOpeningClosing = (newSentence, type) => {
+    const isOpening = type === 'opening'
+    
+    // Find and replace the first or last sentence
+    if (isOpening) {
+      // Replace opening sentence
+      const firstPeriodIndex = editedReport.indexOf('.')
+      if (firstPeriodIndex !== -1) {
+        const newReport = newSentence + editedReport.substring(firstPeriodIndex + 1)
+        setEditedReport(newReport)
+        setCurrentOpening(newSentence)
+      }
+    } else {
+      // Replace closing sentence
+      const sentences = editedReport.trim().split('.')
+      if (sentences.length > 1) {
+        sentences[sentences.length - 2] = ' ' + newSentence.replace(/\.$/, '')
+        const newReport = sentences.join('.')
+        setEditedReport(newReport)
+        setCurrentClosing(newSentence)
+      }
+    }
+  }
+
   const handleCopy = () => {
     navigator.clipboard.writeText(editedReport)
     setCopied(true)
@@ -472,6 +530,73 @@ function EditReport() {
               </div>
             </div>
 
+            {/* Opening Sentence Tool */}
+            <div className="mb-4 border border-indigo-200 rounded-lg bg-indigo-50">
+              <button
+                onClick={() => {
+                  setShowOpeningTool(!showOpeningTool)
+                  if (!showOpeningTool && openingSuggestions.length === 0) {
+                    handleLoadOpeningClosingSuggestions('opening')
+                  }
+                }}
+                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-indigo-100 transition-colors rounded-lg"
+              >
+                <span className="text-sm font-semibold text-indigo-900">✨ Change Opening Sentence</span>
+                {showOpeningTool ? <ChevronUp className="w-4 h-4 text-indigo-700" /> : <ChevronDown className="w-4 h-4 text-indigo-700" />}
+              </button>
+              
+              {showOpeningTool && (
+                <div className="px-4 pb-4 space-y-3">
+                  {currentOpening && (
+                    <div className="bg-white border border-indigo-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-indigo-700 mb-1">Current Opening:</p>
+                      <p className="text-sm text-sage-800">{currentOpening}</p>
+                    </div>
+                  )}
+                  
+                  {previousOpening && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Previous Report Used:</p>
+                      <p className="text-sm text-gray-700">{previousOpening}</p>
+                    </div>
+                  )}
+                  
+                  {loadingOpeningSuggestions ? (
+                    <div className="text-center py-4">
+                      <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+                      <p className="text-sm text-indigo-600 mt-2">Generating suggestions...</p>
+                    </div>
+                  ) : openingSuggestions.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-indigo-700">Try These:</p>
+                      {openingSuggestions.map((suggestion, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleApplyOpeningClosing(suggestion, 'opening')}
+                          className="w-full text-left px-3 py-2 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 transition-colors text-sm"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => handleLoadOpeningClosingSuggestions('opening')}
+                        className="w-full text-center px-3 py-2 bg-indigo-100 border border-indigo-300 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium text-indigo-700"
+                      >
+                        🔄 Generate New Options
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleLoadOpeningClosingSuggestions('opening')}
+                      className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                    >
+                      Generate Suggestions
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
             <textarea
               ref={textareaRef}
               value={editedReport}
@@ -489,6 +614,73 @@ function EditReport() {
               className="w-full px-3 py-2 border border-sage-300 rounded-lg focus:ring-2 focus:ring-sage-500 focus:border-sage-500 font-mono text-sm"
               placeholder="Edit your report here..."
             />
+
+            {/* Closing Sentence Tool */}
+            <div className="mt-4 border border-rose-200 rounded-lg bg-rose-50">
+              <button
+                onClick={() => {
+                  setShowClosingTool(!showClosingTool)
+                  if (!showClosingTool && closingSuggestions.length === 0) {
+                    handleLoadOpeningClosingSuggestions('closing')
+                  }
+                }}
+                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-rose-100 transition-colors rounded-lg"
+              >
+                <span className="text-sm font-semibold text-rose-900">✨ Change Closing Sentence</span>
+                {showClosingTool ? <ChevronUp className="w-4 h-4 text-rose-700" /> : <ChevronDown className="w-4 h-4 text-rose-700" />}
+              </button>
+              
+              {showClosingTool && (
+                <div className="px-4 pb-4 space-y-3">
+                  {currentClosing && (
+                    <div className="bg-white border border-rose-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-rose-700 mb-1">Current Closing:</p>
+                      <p className="text-sm text-sage-800">{currentClosing}</p>
+                    </div>
+                  )}
+                  
+                  {previousClosing && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Previous Report Used:</p>
+                      <p className="text-sm text-gray-700">{previousClosing}</p>
+                    </div>
+                  )}
+                  
+                  {loadingClosingSuggestions ? (
+                    <div className="text-center py-4">
+                      <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-rose-600"></div>
+                      <p className="text-sm text-rose-600 mt-2">Generating suggestions...</p>
+                    </div>
+                  ) : closingSuggestions.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-rose-700">Try These:</p>
+                      {closingSuggestions.map((suggestion, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleApplyOpeningClosing(suggestion, 'closing')}
+                          className="w-full text-left px-3 py-2 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 hover:border-rose-300 transition-colors text-sm"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => handleLoadOpeningClosingSuggestions('closing')}
+                        className="w-full text-center px-3 py-2 bg-rose-100 border border-rose-300 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium text-rose-700"
+                      >
+                        🔄 Generate New Options
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleLoadOpeningClosingSuggestions('closing')}
+                      className="w-full px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors text-sm font-medium"
+                    >
+                      Generate Suggestions
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="mt-4 space-y-3">
               {selectedText && (
