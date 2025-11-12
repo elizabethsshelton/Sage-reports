@@ -481,7 +481,7 @@ function Calendar() {
   }
 
   const handleClearReminder = async (reportId) => {
-    if (!window.confirm('Clear this reminder? It will no longer show up here.')) {
+    if (!window.confirm('Clear this reminder?')) {
       return
     }
     
