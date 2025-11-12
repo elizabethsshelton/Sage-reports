@@ -37,6 +37,10 @@ function EditReport() {
   const [currentClosing, setCurrentClosing] = useState('')
   const [previousOpening, setPreviousOpening] = useState('')
   const [previousClosing, setPreviousClosing] = useState('')
+  const [originalOpening, setOriginalOpening] = useState('')
+  const [originalClosing, setOriginalClosing] = useState('')
+  const [hasChangedOpening, setHasChangedOpening] = useState(false)
+  const [hasChangedClosing, setHasChangedClosing] = useState(false)
   const textareaRef = useRef(null)
 
   useEffect(() => {
@@ -346,6 +350,23 @@ function EditReport() {
   const handleApplyOpeningClosing = (newSentence, type) => {
     const isOpening = type === 'opening'
     
+    // Save original if this is the first change
+    if (isOpening && !hasChangedOpening) {
+      const firstPeriodIndex = editedReport.indexOf('.')
+      if (firstPeriodIndex !== -1) {
+        const original = editedReport.substring(0, firstPeriodIndex + 1).trim()
+        setOriginalOpening(original)
+        setHasChangedOpening(true)
+      }
+    } else if (!isOpening && !hasChangedClosing) {
+      const sentences = editedReport.trim().split('.')
+      if (sentences.length > 1) {
+        const original = sentences[sentences.length - 2].trim() + '.'
+        setOriginalClosing(original)
+        setHasChangedClosing(true)
+      }
+    }
+    
     // Find and replace the first or last sentence
     if (isOpening) {
       // Replace opening sentence
@@ -363,6 +384,33 @@ function EditReport() {
         const newReport = sentences.join('.')
         setEditedReport(newReport)
         setCurrentClosing(newSentence)
+      }
+    }
+  }
+
+  const handleUndoOpeningClosing = (type) => {
+    const isOpening = type === 'opening'
+    
+    if (isOpening && originalOpening) {
+      // Restore original opening
+      const firstPeriodIndex = editedReport.indexOf('.')
+      if (firstPeriodIndex !== -1) {
+        const newReport = originalOpening + editedReport.substring(firstPeriodIndex + 1)
+        setEditedReport(newReport)
+        setCurrentOpening(originalOpening)
+        setHasChangedOpening(false)
+        setOriginalOpening('')
+      }
+    } else if (!isOpening && originalClosing) {
+      // Restore original closing
+      const sentences = editedReport.trim().split('.')
+      if (sentences.length > 1) {
+        sentences[sentences.length - 2] = ' ' + originalClosing.replace(/\.$/, '')
+        const newReport = sentences.join('.')
+        setEditedReport(newReport)
+        setCurrentClosing(originalClosing)
+        setHasChangedClosing(false)
+        setOriginalClosing('')
       }
     }
   }
@@ -578,12 +626,23 @@ function EditReport() {
                           {suggestion}
                         </button>
                       ))}
-                      <button
-                        onClick={() => handleLoadOpeningClosingSuggestions('opening')}
-                        className="w-full text-center px-3 py-2 bg-indigo-100 border border-indigo-300 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium text-indigo-700"
-                      >
-                        🔄 Generate New Options
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleLoadOpeningClosingSuggestions('opening')}
+                          className="flex-1 text-center px-3 py-2 bg-indigo-100 border border-indigo-300 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium text-indigo-700"
+                        >
+                          🔄 Generate New Options
+                        </button>
+                        {hasChangedOpening && (
+                          <button
+                            onClick={() => handleUndoOpeningClosing('opening')}
+                            className="px-4 py-2 bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors text-sm font-medium text-amber-700"
+                            title="Restore original opening sentence"
+                          >
+                            ↩️ Undo
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <button
@@ -663,12 +722,23 @@ function EditReport() {
                           {suggestion}
                         </button>
                       ))}
-                      <button
-                        onClick={() => handleLoadOpeningClosingSuggestions('closing')}
-                        className="w-full text-center px-3 py-2 bg-rose-100 border border-rose-300 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium text-rose-700"
-                      >
-                        🔄 Generate New Options
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleLoadOpeningClosingSuggestions('closing')}
+                          className="flex-1 text-center px-3 py-2 bg-rose-100 border border-rose-300 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium text-rose-700"
+                        >
+                          🔄 Generate New Options
+                        </button>
+                        {hasChangedClosing && (
+                          <button
+                            onClick={() => handleUndoOpeningClosing('closing')}
+                            className="px-4 py-2 bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors text-sm font-medium text-amber-700"
+                            title="Restore original closing sentence"
+                          >
+                            ↩️ Undo
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <button
