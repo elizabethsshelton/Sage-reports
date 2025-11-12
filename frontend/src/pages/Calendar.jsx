@@ -1079,6 +1079,14 @@ function Calendar() {
                   {selectedSession.student?.subject}
                 </p>
               </div>
+
+              {selectedSession.type === 'recurring' && !selectedSession.calendarSessionId && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>ℹ️ One-Time Change:</strong> Editing this recurring session will create a one-time exception. Your regular schedule will remain unchanged for future weeks.
+                  </p>
+                </div>
+              )}
               
               <div>
                 <label className="block text-sm font-medium text-sage-700 mb-2">Date *</label>
