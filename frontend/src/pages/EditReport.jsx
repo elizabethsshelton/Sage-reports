@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2 } from 'lucide-react'
+import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2 } from 'lucide-react'
 import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport } from '../services/api'
 
 function EditReport() {
@@ -24,6 +24,8 @@ function EditReport() {
   const [polishing, setPolishing] = useState(false)
   const [nextSessionNotes, setNextSessionNotes] = useState('')
   const [useForTraining, setUseForTraining] = useState(false)
+  const [undoStack, setUndoStack] = useState([])
+  const [showUndoButton, setShowUndoButton] = useState(false)
   const textareaRef = useRef(null)
 
   useEffect(() => {
@@ -228,6 +230,10 @@ function EditReport() {
     setSelectedText(selectedText)
     setPolishing(true)
 
+    // Save current state to undo stack
+    setUndoStack(prev => [...prev, editedReport])
+    setShowUndoButton(true)
+
     // Save scroll position
     const scrollTop = textarea.scrollTop
 
@@ -263,6 +269,24 @@ function EditReport() {
     } finally {
       setPolishing(false)
       setSelectedText('')
+    }
+  }
+
+  const handleUndo = () => {
+    if (undoStack.length === 0) return
+    
+    // Get the last saved state
+    const previousState = undoStack[undoStack.length - 1]
+    
+    // Remove it from the stack
+    setUndoStack(prev => prev.slice(0, -1))
+    
+    // Restore the previous state
+    setEditedReport(previousState)
+    
+    // Hide undo button if no more undo states
+    if (undoStack.length === 1) {
+      setShowUndoButton(false)
     }
   }
 
@@ -449,7 +473,7 @@ function EditReport() {
 
             <div className="mt-4 space-y-3">
               {selectedText && (
-                <div className="flex justify-end animate-fade-in">
+                <div className="flex justify-end gap-2 animate-fade-in">
                   <button
                     onClick={handlePolishSelection}
                     disabled={polishing}
@@ -457,6 +481,20 @@ function EditReport() {
                   >
                     <Wand2 className="w-4 h-4 mr-2" />
                     {polishing ? 'Polishing...' : 'Polish Selection'}
+                  </button>
+              </div>
+              )}
+              
+              {showUndoButton && undoStack.length > 0 && (
+                <div className="flex justify-end animate-fade-in">
+                  <button
+                    onClick={handleUndo}
+                    disabled={polishing || saving}
+                    className="px-5 py-2 bg-amber-50 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 flex items-center border-2 border-amber-200"
+                    title={`Undo last ${undoStack.length} polish${undoStack.length > 1 ? 'es' : ''}`}
+                  >
+                    <Undo2 className="w-4 h-4 mr-2" />
+                    Undo Polish ({undoStack.length})
                   </button>
               </div>
               )}
