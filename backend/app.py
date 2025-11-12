@@ -538,8 +538,8 @@ def add_contact_to_report(report_id):
             return jsonify({'error': 'Settings not configured'}), 400
         
         tutor_name = settings.tutor_name
-        tutor_phone = settings.tutor_phone
-        tutor_email = settings.tutor_email
+        tutor_phone = settings.phone
+        tutor_email = settings.email
         
         if not tutor_name:
             return jsonify({'error': 'Tutor name not configured in settings'}), 400
