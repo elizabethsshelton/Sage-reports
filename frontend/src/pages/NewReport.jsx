@@ -403,7 +403,7 @@ function NewReport() {
 
             <div>
               <label className="block text-sm font-medium text-sage-700 mb-1">
-                Notes for Next Session
+                Reminders for Next Session
               </label>
               <textarea
                 value={formData.next_session_notes}
