@@ -584,9 +584,9 @@ function EditReport() {
             )}
           </div>
 
-          {/* Next Session Notes - Editable */}
+          {/* Reminders for Next Session - Editable */}
           <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-4">
-            <h3 className="text-sm font-semibold text-sage-800 mb-3">Notes for Next Session</h3>
+            <h3 className="text-sm font-semibold text-sage-800 mb-3">Reminders for Next Session</h3>
             <textarea
               value={nextSessionNotes}
               onChange={(e) => {

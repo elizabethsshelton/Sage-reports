@@ -9,6 +9,7 @@ function Calendar() {
   const [reports, setReports] = useState([])
   const [calendarSessions, setCalendarSessions] = useState([])
   const [weekSubjects, setWeekSubjects] = useState([])
+  const [upcomingReminders, setUpcomingReminders] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentWeek, setCurrentWeek] = useState(0) // 0 = this week, 1 = next week, -1 = last week
   const [showAddModal, setShowAddModal] = useState(false)
@@ -42,6 +43,9 @@ function Calendar() {
       
       // Load week subjects for sticky note
       loadWeekSubjects(activeStudentsData, sessionsData)
+      
+      // Load reminders for upcoming sessions
+      loadUpcomingReminders(activeStudentsData, reportsData, sessionsData, weekDates)
     } catch (error) {
       console.error('Error loading calendar data:', error)
     } finally {
@@ -123,6 +127,93 @@ function Calendar() {
       setWeekSubjects(weekData)
     } catch (error) {
       console.error('Error loading week subjects:', error)
+    }
+  }
+  
+  const loadUpcomingReminders = (studentsList, reportsData, calendarSessionsList, weekDates) => {
+    try {
+      const reminders = []
+      const today = new Date()
+      const currentDay = today.getDay()
+      const sunday = new Date(today)
+      sunday.setDate(today.getDate() - currentDay)
+      sunday.setHours(0, 0, 0, 0)
+      
+      const saturday = new Date(sunday)
+      saturday.setDate(sunday.getDate() + 6)
+      saturday.setHours(23, 59, 59, 999)
+      
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      
+      // For each active student, check if they have a session this week
+      studentsList.forEach(student => {
+        let hasSessionThisWeek = false
+        let sessionDay = null
+        
+        // Check recurring schedule
+        if (student.recurring_schedule) {
+          for (let i = 0; i < 7; i++) {
+            const date = new Date(sunday)
+            date.setDate(sunday.getDate() + i)
+            const dateStr = date.toISOString().split('T')[0]
+            
+            const schedule = student.recurring_schedule.toLowerCase()
+            const dayName = dayNames[i].toLowerCase()
+            
+            if (schedule.includes(dayName.substring(0, 3)) || schedule.includes(dayName)) {
+              // Check if session is not cancelled/deleted
+              const override = calendarSessionsList.find(cs =>
+                cs.student_id === student.id &&
+                cs.session_date?.startsWith(dateStr) &&
+                cs.is_one_time === false
+              )
+              
+              if (!override || (override.status !== 'cancelled' && override.status !== 'deleted')) {
+                hasSessionThisWeek = true
+                sessionDay = dayNames[i]
+                break
+              }
+            }
+          }
+        }
+        
+        // Check one-time sessions
+        if (!hasSessionThisWeek) {
+          calendarSessionsList.forEach(cs => {
+            if (cs.is_one_time && cs.student_id === student.id && cs.status !== 'cancelled' && cs.status !== 'deleted') {
+              const sessionDate = new Date(cs.session_date)
+              if (sessionDate >= sunday && sessionDate <= saturday) {
+                hasSessionThisWeek = true
+                sessionDay = dayNames[sessionDate.getDay()]
+              }
+            }
+          })
+        }
+        
+        // If student has a session this week, check for reminders from most recent report
+        if (hasSessionThisWeek) {
+          const studentReports = reportsData.filter(r => r.student_id === student.id && r.next_session_notes)
+            .sort((a, b) => new Date(b.session_date) - new Date(a.session_date))
+          
+          if (studentReports.length > 0 && studentReports[0].next_session_notes) {
+            reminders.push({
+              student_name: student.name,
+              student_id: student.id,
+              session_day: sessionDay,
+              reminders: studentReports[0].next_session_notes,
+              subject: student.subject
+            })
+          }
+        }
+      })
+      
+      // Sort by session day
+      const dayOrder = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      reminders.sort((a, b) => dayOrder.indexOf(a.session_day) - dayOrder.indexOf(b.session_day))
+      
+      setUpcomingReminders(reminders)
+    } catch (error) {
+      console.error('Error loading upcoming reminders:', error)
     }
   }
   
@@ -459,6 +550,36 @@ function Calendar() {
           View Reports
         </Link>
       </div>
+
+      {/* Upcoming Session Reminders */}
+      {upcomingReminders.length > 0 && (
+        <div className="mb-10 bg-amber-50 border-2 border-amber-200 rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-bold text-amber-900 mb-4 flex items-center">
+            <Clock className="w-5 h-5 mr-2" />
+            Reminders for This Week's Sessions
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {upcomingReminders.map((reminder, idx) => (
+              <div key={idx} className="bg-white border border-amber-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <p className="font-semibold text-sage-900">{reminder.student_name}</p>
+                    {reminder.subject && (
+                      <p className="text-xs text-sage-600">{reminder.subject}</p>
+                    )}
+                  </div>
+                  <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded">
+                    {reminder.session_day}
+                  </span>
+                </div>
+                <div className="mt-2 text-sm text-sage-700 whitespace-pre-wrap">
+                  {reminder.reminders}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Calendar Section Header */}
       <div className="mb-6">
