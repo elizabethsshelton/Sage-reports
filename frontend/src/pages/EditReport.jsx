@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2 } from 'lucide-react'
-import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText } from '../services/api'
+import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport } from '../services/api'
 
 function EditReport() {
   const { id } = useParams()
@@ -9,6 +9,7 @@ function EditReport() {
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [editedReport, setEditedReport] = useState('')
   const [status, setStatus] = useState('draft')
@@ -121,6 +122,35 @@ function EditReport() {
     } catch (error) {
       console.error('Error deleting report:', error)
       alert('Error deleting report. Please try again.')
+    }
+  }
+
+  const handleRegenerate = async () => {
+    if (!window.confirm('This will generate a completely new report from scratch. Your current edits will be replaced. Continue?')) {
+      return
+    }
+    
+    setRegenerating(true)
+    try {
+      // Regenerate the report using the original data
+      const regeneratedReport = await generateReport({
+        student_id: report.student_id,
+        session_date: report.session_date,
+        duration_hours: report.duration_hours,
+        topics_covered: report.topics_covered,
+        activities: report.activities,
+        notes: report.notes,
+        include_contact: false  // User can manually add this if needed
+      })
+      
+      // Update the edited report with the new AI-generated content
+      setEditedReport(regeneratedReport.ai_generated_report)
+      alert('Report regenerated! Review the new version and save when ready.')
+    } catch (error) {
+      console.error('Error regenerating report:', error)
+      alert('Error regenerating report. Please check your AI configuration and try again.')
+    } finally {
+      setRegenerating(false)
     }
   }
 
@@ -431,16 +461,28 @@ function EditReport() {
               </div>
               )}
               
-              {/* Grammar Fix Button */}
-              <button
-                onClick={handleFixGrammar}
-                disabled={fixingGrammar || saving}
-                className="w-full px-6 py-2.5 bg-purple-50 text-purple-700 font-medium rounded-xl hover:bg-purple-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-purple-200"
-                title="Fix grammar and spelling while keeping your exact wording"
-              >
-                <Sparkles className="w-4 h-4 mr-2" />
-                {fixingGrammar ? 'Fixing Grammar...' : '✨ Fix Grammar Only'}
-              </button>
+              {/* AI Action Buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={handleFixGrammar}
+                  disabled={fixingGrammar || saving || regenerating}
+                  className="px-6 py-2.5 bg-purple-50 text-purple-700 font-medium rounded-xl hover:bg-purple-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-purple-200"
+                  title="Fix grammar and spelling while keeping your exact wording"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {fixingGrammar ? 'Fixing...' : 'Fix Grammar'}
+                </button>
+                
+                <button
+                  onClick={handleRegenerate}
+                  disabled={regenerating || saving || fixingGrammar}
+                  className="px-6 py-2.5 bg-blue-50 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-blue-200"
+                  title="Generate a completely new report from scratch"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${regenerating ? 'animate-spin' : ''}`} />
+                  {regenerating ? 'Regenerating...' : 'Regenerate Report'}
+                </button>
+              </div>
               
               {/* Action Buttons */}
               <div className="flex gap-3">

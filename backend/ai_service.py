@@ -147,6 +147,10 @@ VOICE GUIDELINES:
 - Conversational - as if speaking to the parent face-to-face
 - Natural paragraphs that flow - NO bullet points, NO section headers
 
+PUNCTUATION RULES:
+- Use regular hyphens (-) NOT em dashes (—)
+- Keep punctuation simple and natural
+
 STRUCTURE:
 - Start with the greeting, then add a warm opening sentence - vary the wording but keep the idea of being glad to see them (e.g., "It was great to see [Student] again this week!" or "Always a pleasure working with [Student]!" or "Good to see [Student] today!")
 - 2-5 body paragraphs covering what was done, how the student performed, areas to work on

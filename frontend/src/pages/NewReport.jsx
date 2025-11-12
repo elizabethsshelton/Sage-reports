@@ -23,7 +23,6 @@ function NewReport() {
     name: '',
     subject: ''
   })
-  const [minimalEditing, setMinimalEditing] = useState(false)
   const [includeContact, setIncludeContact] = useState(false)
   const [savingDraft, setSavingDraft] = useState(false)
   const [reminders, setReminders] = useState(null)
@@ -154,7 +153,6 @@ function NewReport() {
       const report = await generateReport({ 
         ...formData, 
         student_id: studentId,
-        minimal_editing: minimalEditing,
         include_contact: includeContact
       })
       navigate(`/reports/${report.id}/edit`)
@@ -429,20 +427,7 @@ function NewReport() {
         </div>
 
         {/* AI Options */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-          <label className="flex items-center space-x-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={minimalEditing}
-              onChange={(e) => setMinimalEditing(e.target.checked)}
-              className="w-4 h-4 text-sage-600 border-gray-300 rounded focus:ring-sage-500"
-            />
-            <div>
-              <span className="text-sm font-medium text-sage-900">Minimal AI Editing</span>
-              <p className="text-xs text-sage-600">Use my wording - just fix grammar and clarity</p>
-            </div>
-          </label>
-
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <label className="flex items-center space-x-3 cursor-pointer">
             <input
               type="checkbox"
