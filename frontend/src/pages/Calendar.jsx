@@ -466,7 +466,8 @@ function Calendar() {
       editDate: editDate,
       editTime: editTime,
       editDuration: session.duration_hours || '1',
-      editNotes: session.notes || ''
+      editNotes: session.notes || '',
+      reportId: session.reportId  // Explicitly include reportId
     })
     setShowEditModal(true)
     setMenuOpen(null)
@@ -1066,10 +1067,14 @@ function Calendar() {
                 
                 // If session has a report, update the report's session_date too
                 if (selectedSession.reportId) {
+                  console.log('Updating report', selectedSession.reportId, 'with new datetime:', newDateTime)
                   await updateReport(selectedSession.reportId, {
                     session_date: newDateTime,
                     duration_hours: newDuration
                   })
+                  console.log('Report updated successfully')
+                } else {
+                  console.log('No reportId found for this session')
                 }
                 
                 setShowEditModal(false)
