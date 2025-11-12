@@ -479,22 +479,6 @@ function NewReport() {
             </button>
           </div>
         </div>
-        {/* Help Text */}
-        <div className="p-4 bg-sage-50 border border-sage-200 rounded-lg">
-          <p className="text-sm text-sage-700 mb-2">
-            <strong>💡 Tip:</strong> The more detail you provide, the better the AI-generated report will be.
-          </p>
-          {stats && stats.total_samples > 0 && (
-            <p className="text-sm text-sage-600">
-              ✨ The AI will use <strong>{stats.total_samples} sample report{stats.total_samples !== 1 ? 's' : ''}</strong> to match your writing style
-            </p>
-          )}
-          {stats && stats.total_samples === 0 && (
-            <p className="text-sm text-yellow-700">
-              ⚠️ No sample reports uploaded yet. Upload samples in Settings for better results!
-            </p>
-          )}
-        </div>
       </form>
 
       {/* Reminders Sidebar - Right Side (1 column) */}
