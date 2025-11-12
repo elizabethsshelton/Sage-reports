@@ -481,7 +481,7 @@ function Calendar() {
   }
 
   const handleClearReminder = async (reportId) => {
-    if (!window.confirm('Clear these reminders? They will be removed from the report.')) {
+    if (!window.confirm('Clear this reminder? It will no longer show up here.')) {
       return
     }
     
@@ -610,7 +610,7 @@ function Calendar() {
                 
                 {/* Reminder Date */}
                 <p className="text-xs text-sage-500 mb-2">
-                  From report: {new Date(reminder.report_date).toLocaleDateString('en-US', { 
+                  {new Date(reminder.report_date).toLocaleDateString('en-US', { 
                     month: 'short', 
                     day: 'numeric',
                     year: 'numeric'
