@@ -19,8 +19,9 @@ app = Flask(__name__)
 CORS(app)
 
 # Initialize database
-# Use absolute path to project root database
-DB_PATH = os.getenv('DATABASE_PATH', '/Users/ellizabethshelton/Desktop/Sage/Sage Reports/database/sage_reports.db')
+# Use dynamic path based on project root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.getenv('DATABASE_PATH', os.path.join(PROJECT_ROOT, 'database', 'sage_reports.db'))
 init_db(DB_PATH)
 
 # Initialize AI service
@@ -484,12 +485,28 @@ def suggest_sentences_for_report(report_id):
         cursor_position = data.get('cursor_position')
         student = session_db.query(Student).filter(Student.id == report.student_id).first()
         
-        # Generate suggestions with cursor context
+        # Get previous reports for style reference (training reports)
+        previous_reports = session_db.query(Report)\
+            .filter(Report.student_id == report.student_id)\
+            .filter(Report.id != report_id)\
+            .filter(Report.use_for_training == True)\
+            .order_by(Report.session_date.desc())\
+            .limit(8)\
+            .all()
+        
+        previous_texts = []
+        for prev_report in previous_reports:
+            text = prev_report.final_report or prev_report.ai_generated_report
+            if text:
+                previous_texts.append(text)
+        
+        # Generate suggestions with cursor context and style reference
         suggestions = ai_service.suggest_sentences(
             report_text=report_text,
             student_name=student.name if student else 'the student',
             subject=student.subject if student else 'the subject',
-            cursor_position=cursor_position
+            cursor_position=cursor_position,
+            previous_reports=previous_texts
         )
         
         return jsonify({'suggestions': suggestions}), 200
@@ -503,6 +520,7 @@ def suggest_sentences_for_report(report_id):
 def polish_report_text(report_id):
     """Polish a selected portion of text"""
     data = request.json
+    session_db = get_session(DB_PATH)
     
     try:
         text_to_polish = data.get('text_to_polish', '')
@@ -511,12 +529,213 @@ def polish_report_text(report_id):
         if not text_to_polish:
             return jsonify({'error': 'No text provided'}), 400
         
-        # Polish the text
-        polished = ai_service.polish_text(text_to_polish, full_context)
+        # Get report and student info
+        report = session_db.query(Report).filter(Report.id == report_id).first()
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        # Get previous reports for style reference (training reports)
+        previous_reports = session_db.query(Report)\
+            .filter(Report.student_id == report.student_id)\
+            .filter(Report.id != report_id)\
+            .filter(Report.use_for_training == True)\
+            .order_by(Report.session_date.desc())\
+            .limit(8)\
+            .all()
+        
+        previous_texts = []
+        for prev_report in previous_reports:
+            text = prev_report.final_report or prev_report.ai_generated_report
+            if text:
+                previous_texts.append(text)
+        
+        # Polish the text with style reference
+        polished = ai_service.polish_text(text_to_polish, full_context, previous_texts)
         
         return jsonify({'polished_text': polished}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+    finally:
+        session_db.close()
+
+
+@app.route('/api/reports/<int:report_id>/suggest-synonyms', methods=['POST'])
+def suggest_synonyms_for_word(report_id):
+    """Generate synonym suggestions for a selected word"""
+    data = request.json
+    session_db = get_session(DB_PATH)
+    
+    try:
+        word = data.get('word', '')
+        context = data.get('context', '')
+        
+        if not word:
+            return jsonify({'error': 'No word provided'}), 400
+        
+        # Get report and student info
+        report = session_db.query(Report).filter(Report.id == report_id).first()
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        # Get previous reports for style reference (training reports)
+        previous_reports = session_db.query(Report)\
+            .filter(Report.student_id == report.student_id)\
+            .filter(Report.id != report_id)\
+            .filter(Report.use_for_training == True)\
+            .order_by(Report.session_date.desc())\
+            .limit(5)\
+            .all()
+        
+        previous_texts = []
+        for prev_report in previous_reports:
+            text = prev_report.final_report or prev_report.ai_generated_report
+            if text:
+                previous_texts.append(text)
+        
+        # Generate synonyms with style reference
+        synonyms = ai_service.suggest_synonyms(word, context, previous_texts)
+        
+        return jsonify({'synonyms': synonyms}), 200
+    except Exception as e:
+        print(f"Error in suggest_synonyms_for_word: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 400
+    finally:
+        session_db.close()
+
+
+@app.route('/api/reports/<int:report_id>/review-phrases', methods=['POST'])
+def review_report_phrases(report_id):
+    """Review entire report and find phrases that need improvement"""
+    data = request.json
+    session_db = get_session(DB_PATH)
+    
+    try:
+        report_text = data.get('report_text', '')
+        
+        if not report_text:
+            return jsonify({'error': 'No report text provided'}), 400
+        
+        # Get report and student info
+        report = session_db.query(Report).filter(Report.id == report_id).first()
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        # Get previous reports for style reference (training reports)
+        previous_reports = session_db.query(Report)\
+            .filter(Report.student_id == report.student_id)\
+            .filter(Report.id != report_id)\
+            .filter(Report.use_for_training == True)\
+            .order_by(Report.session_date.desc())\
+            .limit(8)\
+            .all()
+        
+        previous_texts = []
+        for prev_report in previous_reports:
+            text = prev_report.final_report or prev_report.ai_generated_report
+            if text:
+                previous_texts.append(text)
+        
+        # Review the report
+        suggestions = ai_service.review_report_phrases(report_text, previous_texts)
+        
+        return jsonify({'suggestions': suggestions}), 200
+    except Exception as e:
+        print(f"Error in review_report_phrases: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 400
+    finally:
+        session_db.close()
+
+
+@app.route('/api/reports/<int:report_id>/redo-paragraph', methods=['POST'])
+def redo_paragraph(report_id):
+    """Completely rewrite a paragraph in the user's style"""
+    data = request.json
+    session_db = get_session(DB_PATH)
+    
+    try:
+        report = session_db.query(Report).filter(Report.id == report_id).first()
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        paragraph = data.get('paragraph', '')
+        full_report = data.get('full_report', '')
+        
+        if not paragraph:
+            return jsonify({'error': 'No paragraph provided'}), 400
+        
+        # Get student info
+        student = session_db.query(Student).filter(Student.id == report.student_id).first()
+        student_name = student.name if student else 'the student'
+        
+        # Get previous reports for style reference
+        previous_reports = session_db.query(Report)\
+            .filter(Report.student_id == report.student_id)\
+            .filter(Report.id != report_id)\
+            .filter(Report.use_for_training == True)\
+            .order_by(Report.session_date.desc())\
+            .limit(5)\
+            .all()
+        
+        previous_texts = []
+        for prev_report in previous_reports:
+            text = prev_report.final_report or prev_report.ai_generated_report
+            if text:
+                previous_texts.append(text)
+        
+        # Rewrite the paragraph
+        rewritten = ai_service.redo_paragraph(
+            paragraph=paragraph,
+            full_report=full_report,
+            student_name=student_name,
+            previous_reports=previous_texts
+        )
+        
+        return jsonify({'rewritten_paragraph': rewritten}), 200
+    except Exception as e:
+        print(f"Error redoing paragraph: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 400
+    finally:
+        session_db.close()
+
+
+def _extract_sentence(text: str, sentence_type: str) -> str:
+    """Extract opening or closing sentence properly handling ., !, and ?"""
+    import re
+    if not text:
+        return ""
+    
+    text = text.strip()
+    
+    # Remove greeting lines like "Hi Name," at the start
+    if sentence_type == 'opening':
+        lines = text.split('\n')
+        # Skip greeting line if it starts with "Hi"
+        if lines and lines[0].strip().startswith('Hi '):
+            text = '\n'.join(lines[1:]).strip()
+    
+    # Remove signature at the end (Best, Name)
+    if sentence_type == 'closing':
+        text = re.sub(r'\n*Best,\n[^\n]+(?:\n[^\n]+)*$', '', text).strip()
+    
+    # Split on sentence boundaries (., !, ?)
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    if not sentences:
+        return text[:100] if len(text) > 100 else text
+    
+    if sentence_type == 'opening':
+        # For opening, get ONLY the first sentence
+        return sentences[0]
+    else:  # closing
+        # For closing, get ONLY the last sentence
+        return sentences[-1]
 
 
 @app.route('/api/reports/<int:report_id>/suggest-opening-closing', methods=['POST'])
@@ -552,31 +771,26 @@ def suggest_opening_closing_sentences(report_id):
             if text:
                 previous_texts.append(text)
         
-        # Get current report's opening/closing for reference
-        current_text = report.final_report or report.ai_generated_report or ''
-        current_sentence = ""
-        if current_text:
-            if sentence_type == 'opening':
-                current_sentence = current_text.split('.')[0] + '.' if '.' in current_text else current_text[:100]
-            else:
-                sentences = current_text.strip().split('.')
-                current_sentence = sentences[-2] + '.' if len(sentences) > 1 else sentences[-1]
+        # Get current report text from request body (most up-to-date version)
+        current_text = data.get('report_text', '')
+        if not current_text:
+            # Fallback to database version
+            current_text = report.final_report or report.ai_generated_report or ''
+        
+        # Extract current sentence using improved function
+        current_sentence = _extract_sentence(current_text, sentence_type)
         
         # Get previous report's sentence for reference
         previous_sentence = ""
         if previous_texts:
-            prev_text = previous_texts[0]
-            if sentence_type == 'opening':
-                previous_sentence = prev_text.split('.')[0] + '.' if '.' in prev_text else prev_text[:100]
-            else:
-                sentences = prev_text.strip().split('.')
-                previous_sentence = sentences[-2] + '.' if len(sentences) > 1 else sentences[-1]
+            previous_sentence = _extract_sentence(previous_texts[0], sentence_type)
         
-        # Generate suggestions
+        # Generate suggestions with full context
         suggestions = ai_service.suggest_opening_closing(
             student_name=student.name,
             previous_reports=previous_texts,
-            sentence_type=sentence_type
+            sentence_type=sentence_type,
+            current_report_text=current_text
         )
         
         return jsonify({
@@ -596,6 +810,7 @@ def suggest_opening_closing_sentences(report_id):
 @app.route('/api/reports/<int:report_id>/add-contact', methods=['POST'])
 def add_contact_to_report(report_id):
     """Add contact information to an existing report"""
+    data = request.json
     session_db = get_session(DB_PATH)
     
     try:
@@ -603,8 +818,12 @@ def add_contact_to_report(report_id):
         if not report:
             return jsonify({'error': 'Report not found'}), 404
         
-        # Get current report text
-        current_report = report.final_report or report.ai_generated_report or ''
+        # CRITICAL: Get current report text from request body (the user's current edits)
+        # NOT from the database (which would be the old saved version)
+        current_report = data.get('report_text', '')
+        if not current_report:
+            # Fallback to database version only if no text provided
+            current_report = report.final_report or report.ai_generated_report or ''
         
         # Get settings for contact info
         settings = session_db.query(UserSettings).first()
@@ -660,114 +879,15 @@ def get_session_reminders(student_id):
             return jsonify({
                 'has_reminders': False,
                 'manual_notes': None,
-                'ai_extracted': [],
                 'last_session_date': None
             })
         
-        # Get manual next_session_notes
+        # Get manual next_session_notes only
         manual_notes = last_report.next_session_notes
         
-        # Extract AI action items from the report text
-        ai_extracted = []
-        report_text = last_report.final_report or last_report.ai_generated_report
-        
-        if report_text and ai_service.client:
-            # Use AI to extract action items
-            try:
-                prompt = f"""Analyze this tutoring session report and extract ONLY forward-looking action items specifically mentioned for the NEXT session.
-
-Report:
-{report_text}
-
-CRITICAL: Only extract items that explicitly refer to FUTURE sessions/plans, such as:
-- "Has a test on [date]" → upcoming assessment
-- "Next time we'll focus on..." → explicit next session plan
-- "Student needs to practice X before next session" → homework/prep
-- "Will continue working on Y" → ongoing topic
-- "Bring Z next time" → specific material request
-
-DO NOT extract:
-- General struggles from THIS session (unless explicitly mentioned as needing follow-up)
-- Past accomplishments
-- Generic suggestions without future context
-- Descriptions of what happened in this session
-
-REQUIREMENTS:
-- Maximum 3 items (if report doesn't mention specific next-session plans, return [])
-- Be DIRECT and CONCISE
-- Include brief context (WHAT + WHY)
-- Skip fluff and platitudes
-
-Good examples (forward-looking):
-- "Geometry test Friday - review angle relationships"
-- "Continue factoring next time; still struggling with GCF"
-- "Bring completed homework packet to review together"
-
-Bad examples (about THIS session, not NEXT):
-- "Student worked on proofs today"
-- "Struggled with complex diagrams in this session"
-- "Showed improvement in algebra"
-
-Return JSON array:
-[
-  {{"reminder": "concise forward-looking reminder", "source": "1-2 sentence excerpt mentioning next session"}},
-]
-
-Return 0-3 items. If nothing forward-looking mentioned, return []."""
-
-                if ai_service.provider == 'openai':
-                    response = ai_service.client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.3,
-                        max_tokens=300
-                    )
-                    result = response.choices[0].message.content.strip()
-                else:  # anthropic
-                    response = ai_service.client.messages.create(
-                        model="claude-3-5-sonnet-20241022",
-                        max_tokens=300,
-                        temperature=0.3,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    result = response.content[0].text.strip()
-                
-                # Parse JSON response
-                import json
-                import re
-                
-                # Clean up response - remove markdown code blocks if present
-                result = result.strip()
-                if result.startswith('```'):
-                    result = re.sub(r'```(?:json)?\s*|\s*```', '', result).strip()
-                
-                print(f"Reminders extraction raw response: {result}")
-                
-                if not result or result == '[]':
-                    ai_extracted = []
-                else:
-                    ai_extracted = json.loads(result)
-                    if not isinstance(ai_extracted, list):
-                        ai_extracted = []
-                    # Validate format: should be list of objects with 'reminder' and 'source' keys
-                    # But also support old string format for backwards compatibility
-                    validated = []
-                    for item in ai_extracted:
-                        if isinstance(item, str):
-                            validated.append({'reminder': item, 'source': None})
-                        elif isinstance(item, dict) and 'reminder' in item:
-                            validated.append(item)
-                    ai_extracted = validated[:3]  # Limit to 3
-                    print(f"Extracted reminders: {ai_extracted}")
-                
-            except Exception as e:
-                print(f"Error extracting action items: {e}")
-                ai_extracted = []
-        
         return jsonify({
-            'has_reminders': bool(manual_notes or ai_extracted),
+            'has_reminders': bool(manual_notes),
             'manual_notes': manual_notes,
-            'ai_extracted': ai_extracted,
             'last_session_date': last_report.session_date.isoformat() if last_report.session_date else None,
             'last_report_id': last_report.id
         })
@@ -1066,9 +1186,13 @@ def get_calendar_sessions():
         # This way deleted overrides can be detected to hide recurring sessions
         
         if start_date:
-            query = query.filter(CalendarSession.session_date >= datetime.fromisoformat(start_date))
+            # Handle 'Z' timezone indicator (replace with +00:00 for Python's fromisoformat)
+            start_date_parsed = start_date.replace('Z', '+00:00') if start_date.endswith('Z') else start_date
+            query = query.filter(CalendarSession.session_date >= datetime.fromisoformat(start_date_parsed))
         if end_date:
-            query = query.filter(CalendarSession.session_date <= datetime.fromisoformat(end_date))
+            # Handle 'Z' timezone indicator (replace with +00:00 for Python's fromisoformat)
+            end_date_parsed = end_date.replace('Z', '+00:00') if end_date.endswith('Z') else end_date
+            query = query.filter(CalendarSession.session_date <= datetime.fromisoformat(end_date_parsed))
         
         sessions = query.order_by(CalendarSession.session_date).all()
         return jsonify([s.to_dict() for s in sessions])
@@ -1342,13 +1466,38 @@ def update_user_settings():
 # ============================================
 
 if __name__ == '__main__':
+    # Try port 5000, but use 5001 if it's in use (common on macOS with AirPlay)
     port = int(os.getenv('FLASK_PORT', 5000))
-    host = os.getenv('FLASK_HOST', '127.0.0.1')
+    # Use 0.0.0.0 to accept connections from network, not just localhost
+    host = os.getenv('FLASK_HOST', '0.0.0.0')
+    
+    # Check if port is in use and try alternative
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if sock.connect_ex(('127.0.0.1', port)) == 0:
+        print(f"⚠️  Port {port} is in use, trying port 5001...")
+        port = 5001
+    sock.close()
     
     print(f"\n🎓 Sage Tutoring Report System")
     print(f"📊 Server running at http://{host}:{port}")
     print(f"🤖 AI Provider: {AI_PROVIDER}")
     print(f"💾 Database: {os.path.abspath(DB_PATH)}")
-    print(f"💾 Database exists: {os.path.exists(DB_PATH)}\n")
+    print(f"💾 Database exists: {os.path.exists(DB_PATH)}")
+    
+    # Show network access info
+    import socket
+    try:
+        # Get local IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        print(f"🌐 Access from other devices on your network:")
+        print(f"   http://{local_ip}:{port}")
+    except:
+        pass
+    
+    print()
     
     app.run(host=host, port=port, debug=True)

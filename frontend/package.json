@@ -2,6 +2,7 @@
   "name": "sage-tutoring-reports",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "AI-assisted tutoring report system",
   "dependencies": {
     "react": "^18.2.0",
@@ -37,3 +38,4 @@
     ]
   }
 }
+

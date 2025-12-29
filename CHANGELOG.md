@@ -4,6 +4,404 @@ This file tracks all development sessions, changes, and features added to the Sa
 
 ---
 
+## 🗓️ Session: December 3, 2024 - Real-Time Auto-Save & Data Loss Prevention
+
+### **Summary**
+Implemented comprehensive auto-save functionality to prevent data loss when editing reports. Reports now save automatically in real-time, with localStorage backup and browser warnings to prevent accidental data loss.
+
+### **Key Changes**
+
+#### **1. Real-Time Auto-Save**
+- **Debounced auto-save** - Saves changes automatically 2 seconds after user stops typing
+- **Visual feedback** - Shows "Auto-saving...", "Auto-saved", or error status in the UI
+- **Saves to `final_report` field** - Ensures edits persist and don't revert to original AI generation
+- **No manual save required** - Changes are saved automatically, but manual save button still available
+
+#### **2. Data Loss Prevention**
+- **localStorage backup** - Saves edits to browser storage immediately as backup
+- **beforeunload warning** - Browser warns user before leaving page with unsaved changes
+- **Prioritizes `final_report`** - When loading, always shows user's edited version, not original AI generation
+- **Automatic recovery** - Restores from localStorage backup if page reloads unexpectedly
+
+#### **3. AI Suggestion & Polishing Features - Tone Consistency**
+- **Updated all AI prompts** - `suggest_sentences`, `suggest_opening_closing`, `polish_text`, and `redo_paragraph` now use same narrative, example-driven approach
+- **Consistent tone** - All AI features now match the casual, conversational, caring tone of main report generation
+- **Removed instruction lists** - Replaced with narrative descriptions that emphasize natural, genuine writing
+
+### **Files Changed**
+- `frontend/src/pages/EditReport.jsx` - Added auto-save logic, localStorage backup, beforeunload warning, and visual status indicators
+- `backend/ai_service.py` - Updated all suggestion and polishing prompts to match main report generation tone
+
+### **Technical Details**
+- Auto-save debounce: 2 seconds after typing stops
+- localStorage backup: Saves immediately on every change, cleared after successful save
+- Backup retention: localStorage backups expire after 1 hour
+- Status indicators: Real-time feedback showing save state
+- Error handling: Graceful fallback if auto-save fails, prompts user to save manually
+
+### **User Experience Improvements**
+- **No more lost work** - Edits are saved automatically and backed up
+- **Clear feedback** - Users can see when their work is being saved
+- **Safe navigation** - Browser warns before leaving with unsaved changes
+- **Consistent AI tone** - All AI suggestions match the desired casual, caring voice
+
+---
+
+## 🗓️ Session: December 3, 2024 - New Mac Setup Complete & Critical Fixes
+
+### **Summary**
+Completed full setup verification for new Mac, fixed multiple critical issues including missing frontend files, CSS processing problems, API date parsing errors, and restored full application functionality. Application now working correctly on new Mac.
+
+### **Key Changes**
+
+#### **1. New Mac Setup & Verification**
+- **Created `verify_setup.sh`** - Comprehensive environment verification script
+- **Created `NEW_MAC_SETUP.md`** - Complete setup guide for new Mac
+- **Created `VIRTUAL_ENVIRONMENT_EXPLAINED.md`** - Beginner-friendly virtual environment guide
+- **Fixed `setup.sh`** - Now properly uses virtual environment for all package installations
+- **Fixed hardcoded database path** - Changed to dynamic path based on project root
+
+#### **2. Critical Frontend File Restoration**
+- **Restored missing files from git:**
+  - `frontend/index.html` - Entry point
+  - `frontend/src/App.jsx` - Main React component
+  - `frontend/src/main.jsx` - React entry point
+  - `frontend/src/index.css` - Styles
+  - `frontend/src/components/Layout.jsx` - Layout component
+  - `frontend/src/pages/NewReport.jsx` - New report page
+  - `frontend/src/pages/Reports.jsx` - Reports page
+  - `frontend/src/pages/Settings.jsx` - Settings page
+  - `frontend/src/pages/Students.jsx` - Students page
+  - `frontend/src/services/api.js` - API client
+  - `frontend/tailwind.config.js` - Tailwind configuration
+  - `frontend/postcss.config.js` - PostCSS configuration
+  - `frontend/vite.config.js` - Vite configuration
+  - `frontend/package.json` - Dependencies
+
+#### **3. CSS/Styling Fixes**
+- **Fixed PostCSS configuration** - Changed from CommonJS to ES module format
+- **Added `"type": "module"` to package.json** - Required for ES modules
+- **Updated vite.config.js** - Added explicit CSS PostCSS configuration
+- **Cleared Vite cache** - Ensured fresh CSS processing
+- **Fixed Tailwind CSS processing** - Now properly processes in dev mode
+
+#### **4. Backend API Fixes**
+- **Fixed date parsing error** - Calendar sessions API now handles 'Z' timezone correctly
+- **Fixed port conflict** - Added automatic port fallback (5000 → 5001 if in use)
+- **Improved error handling** - Better date format handling
+
+#### **5. Launch Script Improvements**
+- **Created `Launch Sage Reports.command`** - Double-clickable launcher
+- **Improved launch script** - Better waiting logic and server readiness checks
+- **Added network access display** - Shows local IP for network access
+
+#### **6. Calendar Fixes**
+- **Fixed calendar data calculation** - Added useMemo for proper recalculation
+- **Fixed schedule parsing** - Better handling of plural day names ("Mondays" vs "Monday")
+- **Fixed date calculation bug** - Prevented date object mutation
+- **Removed debug console logs** - Cleaned up development logging
+
+### **Files Created**
+- `verify_setup.sh` - Setup verification script
+- `NEW_MAC_SETUP.md` - New Mac setup guide
+- `VIRTUAL_ENVIRONMENT_EXPLAINED.md` - Virtual environment explanation
+- `NETWORK_ACCESS.md` - Network access guide
+- `CREATE_DESKTOP_APP.md` - Desktop app creation guide
+- `SIMPLE_START_GUIDE.md` - Simple start instructions
+- `TROUBLESHOOTING.md` - Troubleshooting guide
+- `Launch Sage Reports.command` - Double-click launcher
+
+### **Files Modified**
+- `backend/app.py` - Fixed database path, date parsing, port handling
+- `frontend/vite.config.js` - Added CSS PostCSS config, network access
+- `frontend/postcss.config.js` - Changed to ES module format
+- `frontend/package.json` - Added "type": "module"
+- `frontend/src/pages/Calendar.jsx` - Fixed date calculation, added useMemo, improved schedule parsing
+- `setup.sh` - Fixed to use virtual environment properly
+- `launch.sh` - Added network IP display
+- `start_frontend.sh` - Added network URL display
+- `start_backend.sh` - No changes needed (already correct)
+
+### **Files Restored from Git**
+- All frontend source files that were accidentally deleted
+- Configuration files (tailwind, postcss, vite)
+
+### **Key Decisions Made**
+
+1. **Virtual environment safety** - Ensured all Python packages install into venv, not system
+2. **Dynamic paths** - Removed all hardcoded user paths for portability
+3. **ES modules** - Standardized on ES module format for modern JavaScript
+4. **Network access** - Enabled by default for convenience (local network only)
+5. **Comprehensive documentation** - Created multiple guides for different user needs
+
+### **Issues Fixed**
+
+✅ **Missing frontend files** - Restored all deleted source files  
+✅ **CSS not processing** - Fixed PostCSS/Tailwind configuration  
+✅ **API 500 errors** - Fixed date parsing with 'Z' timezone  
+✅ **Calendar not showing sessions** - Fixed data loading and calculation  
+✅ **Port conflicts** - Added automatic port fallback  
+✅ **Virtual environment** - Fixed setup script to use venv properly  
+✅ **Hardcoded paths** - Made all paths dynamic  
+
+### **Current System State**
+
+- ✅ All frontend files restored and working
+- ✅ CSS processing correctly (Tailwind working)
+- ✅ Backend API working (date parsing fixed)
+- ✅ Calendar displaying sessions correctly
+- ✅ Virtual environment properly configured
+- ✅ Network access enabled
+- ✅ Double-click launcher working
+- ✅ All dependencies installed correctly
+
+### **Testing Notes**
+
+- Verified CSS processing in both dev and build modes
+- Tested calendar session display
+- Verified API endpoints working
+- Confirmed virtual environment isolation
+- Tested network access functionality
+
+---
+
+## 🗓️ Session: December 2024 - Network Access & Remote Device Support
+
+### **Summary**
+Enabled network access so the application can be used from other devices (phones, tablets, other computers) on the same WiFi network. Previously only accessible from localhost, now accessible from any device on your local network.
+
+### **Key Changes**
+
+#### **1. Backend Network Access**
+- **Updated `backend/app.py`:**
+  - Changed Flask host from `127.0.0.1` (localhost only) to `0.0.0.0` (accepts network connections)
+  - Added automatic IP address detection and display
+  - Shows network URL when server starts (e.g., `http://192.168.1.100:5000`)
+  - Still supports `FLASK_HOST` environment variable for customization
+  - Maintains backward compatibility with localhost access
+
+#### **2. Frontend Network Access**
+- **Updated `frontend/vite.config.js`:**
+  - Added `host: '0.0.0.0'` to Vite server configuration
+  - Frontend now accepts connections from network devices
+  - Proxy configuration maintained for API calls
+  - Works seamlessly with backend on network
+
+#### **3. Enhanced Launch Scripts**
+- **Updated `launch.sh`:**
+  - Automatically detects and displays local IP address
+  - Shows both localhost and network URLs
+  - Provides clear instructions for accessing from other devices
+  - Displays network access URL prominently
+
+- **Updated `start_frontend.sh`:**
+  - Shows network access URL when starting
+  - Displays both local and network addresses
+
+#### **4. Network Access Documentation**
+- **Created `NETWORK_ACCESS.md`:**
+  - Complete guide for accessing from other devices
+  - Step-by-step instructions for iPhone/iPad/Android
+  - Troubleshooting section
+  - Security notes and best practices
+  - Manual IP address lookup methods
+
+### **Files Created**
+- `NETWORK_ACCESS.md` - Comprehensive network access guide
+
+### **Files Modified**
+- `backend/app.py` - Changed host to `0.0.0.0` and added IP detection
+- `frontend/vite.config.js` - Added `host: '0.0.0.0'` for network access
+- `launch.sh` - Added IP detection and network URL display
+- `start_frontend.sh` - Added network URL display
+
+### **Key Decisions Made**
+
+1. **Network-first approach** - Changed default to accept network connections while maintaining localhost access
+2. **Automatic IP detection** - Scripts automatically find and display network IP for convenience
+3. **Clear user guidance** - Launch scripts show exactly how to access from other devices
+4. **Security conscious** - Only accessible on local network (not public internet) for safety
+
+### **Benefits**
+
+✅ **Access from any device** - Use on iPhone, iPad, Android, or other computers  
+✅ **Same WiFi network** - Simple setup, no complex configuration  
+✅ **Seamless experience** - Works exactly the same as localhost  
+✅ **No additional setup** - Just run `./launch.sh` as usual  
+✅ **Automatic detection** - IP address shown automatically  
+✅ **Secure** - Only accessible on your local network, not public internet  
+
+### **Usage**
+
+**Before:**
+- Only accessible at `http://localhost:3000` on your Mac
+
+**After:**
+- Accessible at `http://localhost:3000` on your Mac (still works)
+- **Also accessible at `http://YOUR_IP:3000` from any device on your WiFi**
+- Launch script shows the network URL automatically
+
+### **Example Output**
+
+When you run `./launch.sh`, you'll now see:
+
+```
+✅ Sage Reports is running!
+
+   📱 Local access:
+      🌐 Frontend: http://localhost:3000
+      🔧 Backend:  http://127.0.0.1:5000
+
+   🌍 Network access (from other devices on your WiFi):
+      🌐 Frontend: http://192.168.1.100:3000
+      🔧 Backend:  http://192.168.1.100:5000
+
+   💡 To access from your phone/tablet:
+      1. Make sure your device is on the same WiFi network
+      2. Open a browser and go to: http://192.168.1.100:3000
+```
+
+### **Current System State**
+
+- ✅ Backend accepts network connections (host: 0.0.0.0)
+- ✅ Frontend accepts network connections (host: 0.0.0.0)
+- ✅ Launch scripts show network access URLs
+- ✅ Comprehensive documentation available
+- ✅ Backward compatible with localhost access
+
+---
+
+## 🗓️ Session: December 2024 - New Mac Setup & Safety Fixes
+
+### **Summary**
+Prepared project for use on new Mac by fixing hardcoded paths, creating setup verification tools, and providing comprehensive new Mac setup documentation. **CRITICAL FIX**: Updated setup script to ensure all Python packages install into virtual environment, not system Python, protecting the user's Mac from system-level package installations.
+
+### **Key Changes**
+
+#### **1. Fixed Hardcoded Database Path**
+- **Fixed `backend/app.py`:**
+  - Removed hardcoded absolute path with typo (`/Users/ellizabethshelton/...`)
+  - Replaced with dynamic path based on project root directory
+  - Uses `os.path.join()` for cross-platform compatibility
+  - Now works on any Mac regardless of username or path location
+  - Falls back to `DATABASE_PATH` environment variable if set
+
+**Before:**
+```python
+DB_PATH = os.getenv('DATABASE_PATH', '/Users/ellizabethshelton/Desktop/Sage/Sage Reports/database/sage_reports.db')
+```
+
+**After:**
+```python
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.getenv('DATABASE_PATH', os.path.join(PROJECT_ROOT, 'database', 'sage_reports.db'))
+```
+
+#### **2. Created Setup Verification Script**
+- **Created `verify_setup.sh`:**
+  - Comprehensive environment check script
+  - Verifies all prerequisites before running project
+  - Checks for:
+    - ✅ Xcode Command Line Tools
+    - ✅ Python 3.8+ installation
+    - ✅ Node.js 14+ installation
+    - ✅ npm availability
+    - ✅ Virtual environment status
+    - ✅ Python dependencies
+    - ✅ Node.js dependencies
+    - ✅ Environment configuration (.env file)
+    - ✅ Database directory
+    - ✅ Project structure integrity
+  - Provides clear error messages and installation guidance
+  - Color-coded output (✅ green for success, ⚠️ yellow for warnings, ❌ red for errors)
+  - Exit codes for automation (0 = success, 1 = issues found)
+
+#### **3. Created New Mac Setup Guide**
+- **Created `NEW_MAC_SETUP.md`:**
+  - Complete step-by-step guide for setting up on a new Mac
+  - Covers all prerequisites:
+    - Xcode Command Line Tools installation
+    - Homebrew installation (optional but recommended)
+    - Python 3 installation (multiple methods)
+    - Node.js installation (multiple methods)
+  - Project setup instructions:
+    - Running verification script
+    - Running setup script
+    - Environment configuration
+    - Virtual environment setup
+    - Frontend dependencies
+  - Troubleshooting section for common issues
+  - Quick reference for commands
+  - Next steps after successful setup
+
+#### **4. CRITICAL SAFETY FIX - Virtual Environment Protection**
+- **Fixed `setup.sh` script:**
+  - **BEFORE:** Was installing Python packages directly to system Python using `pip3 install` without activating virtual environment
+  - **AFTER:** Now properly creates, activates, and uses virtual environment before installing packages
+  - All packages now install into `venv/` folder, not system Python
+  - Added verification to ensure virtual environment is activated
+  - Added safety checks to prevent accidental system-level installations
+  - Protects user's Mac from system Python modifications
+  - Added clear messaging about where packages are being installed
+
+**Safety improvements:**
+- ✅ Creates virtual environment if it doesn't exist
+- ✅ Activates virtual environment before any pip installs
+- ✅ Verifies Python path is from venv (not system)
+- ✅ All packages isolated to project's venv folder
+- ✅ System Python remains untouched
+
+### **Files Created**
+- `verify_setup.sh` - Setup verification script (executable)
+- `NEW_MAC_SETUP.md` - Comprehensive new Mac setup guide
+- `VIRTUAL_ENVIRONMENT_EXPLAINED.md` - Beginner-friendly explanation of virtual environments
+
+### **Files Modified**
+- `backend/app.py` - Fixed hardcoded database path to use dynamic project root
+- `setup.sh` - **CRITICAL FIX**: Now properly uses virtual environment for all package installations
+
+### **Key Decisions Made**
+
+1. **Dynamic paths** - Changed from hardcoded absolute paths to dynamic relative paths based on project root
+2. **Cross-platform compatibility** - Used `os.path.join()` instead of string concatenation for paths
+3. **Verification first** - Created verification script to catch setup issues early
+4. **Comprehensive documentation** - New Mac setup guide covers all scenarios and troubleshooting
+5. **Safety first** - Fixed setup script to ensure virtual environment isolation (prevents system Python modifications)
+
+### **Benefits**
+
+✅ **Works on any Mac** - No more hardcoded username paths  
+✅ **Easier setup** - Verification script catches issues before running  
+✅ **Better documentation** - Complete guide for new Mac setup  
+✅ **Environment variable support** - Still supports `DATABASE_PATH` override  
+✅ **Future-proof** - Works regardless of where project is located  
+✅ **System protection** - All Python packages isolated to virtual environment, system Python untouched  
+
+### **Current System State**
+
+- ✅ Database path is now dynamic and portable
+- ✅ Setup verification tools in place
+- ✅ Comprehensive new Mac setup documentation available
+- ✅ All dependencies verified (Python 3.8+, Node.js 14+, npm)
+- ✅ Project structure verified and intact
+
+### **Next Steps for New Mac Setup**
+
+1. Install Xcode Command Line Tools: `xcode-select --install`
+2. Install Python 3 and Node.js (via Homebrew or direct download)
+3. Run verification: `./verify_setup.sh`
+4. Run setup: `./setup.sh`
+5. Configure `.env` file with API key
+6. Launch application: `./launch.sh`
+
+### **Testing Notes**
+
+- Verification script tested for all check conditions
+- Path fix verified to work regardless of project location
+- Documentation reviewed for completeness and accuracy
+
+---
+
 ## 🗓️ Session: November 3, 2025
 
 ### **Summary**

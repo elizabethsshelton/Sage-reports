@@ -126,6 +126,21 @@ export const suggestOpeningClosing = async (reportId, sentenceType) => {
   return response.data
 }
 
+export const suggestSynonyms = async (reportId, word, context = '') => {
+  const response = await api.post(`/reports/${reportId}/suggest-synonyms`, { 
+    word: word,
+    context: context
+  })
+  return response.data
+}
+
+export const reviewReportPhrases = async (reportId, reportText) => {
+  const response = await api.post(`/reports/${reportId}/review-phrases`, { 
+    report_text: reportText
+  })
+  return response.data
+}
+
 // Sample Reports
 export const getSampleReports = async () => {
   const response = await api.get('/sample-reports')

@@ -30,14 +30,49 @@ fi
 echo "✅ Node.js found: $(node --version)"
 echo ""
 
-# Install Python packages
-echo "📦 Installing Python packages..."
-pip3 install -r requirements.txt
+# Create virtual environment if it doesn't exist
+echo "📦 Setting up virtual environment..."
+if [ ! -d "venv" ]; then
+    echo "   Creating virtual environment..."
+    python3 -m venv venv
+    if [ $? -ne 0 ]; then
+        echo "❌ Failed to create virtual environment"
+        exit 1
+    fi
+    echo "✅ Virtual environment created"
+else
+    echo "✅ Virtual environment already exists"
+fi
+
+# Activate virtual environment
+echo "   Activating virtual environment..."
+source venv/bin/activate
 if [ $? -ne 0 ]; then
-    echo "❌ Failed to install Python packages"
+    echo "❌ Failed to activate virtual environment"
     exit 1
 fi
-echo "✅ Python packages installed"
+
+# Verify we're using the venv Python
+VENV_PYTHON=$(which python3)
+if [[ "$VENV_PYTHON" != *"venv"* ]]; then
+    echo "⚠️  Warning: Virtual environment may not be activated correctly"
+    echo "   Python path: $VENV_PYTHON"
+fi
+
+# Install Python packages INTO the virtual environment
+echo "📦 Installing Python packages (into virtual environment)..."
+pip install -r requirements.txt
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to install Python packages"
+    deactivate 2>/dev/null
+    exit 1
+fi
+echo "✅ Python packages installed into virtual environment"
+echo ""
+
+# Deactivate virtual environment (we'll reactivate it when running the app)
+deactivate
+echo "   Virtual environment deactivated (will be activated automatically when you run the app)"
 echo ""
 
 # Install frontend packages

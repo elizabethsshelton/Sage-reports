@@ -33,4 +33,4 @@ echo "   Press Ctrl+C to stop"
 echo ""
 
 # Start the backend
-python backend/app.py
+python3 backend/app.py

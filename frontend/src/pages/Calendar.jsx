@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, FileText, ChevronLeft, ChevronRight, Clock, X, Edit, Trash2, MoreVertical, Users } from 'lucide-react'
 import { getStudents, getReports, getCalendarSessions, createCalendarSession, updateCalendarSession, deleteCalendarSession, createStudent, updateReport } from '../services/api'
@@ -234,7 +234,9 @@ function Calendar() {
     const currentDay = today.getDay()
     const diff = today.getDate() - currentDay + (currentWeek * 7)
     
-    const sunday = new Date(today.setDate(diff))
+    // Don't mutate the original date object
+    const sunday = new Date(today)
+    sunday.setDate(diff)
     sunday.setHours(0, 0, 0, 0)
     
     return Array.from({ length: 7 }, (_, i) => {
@@ -256,13 +258,15 @@ function Calendar() {
     
     parts.forEach(part => {
       days.forEach((day, index) => {
-        if (part.includes(day) || part.includes(day.substring(0, 3))) {
-          // Extract time
-          const timeMatch = part.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+        // Check for full day name or 3-letter abbreviation, handling plurals
+        const dayPattern = day.substring(0, 3)
+        if (part.includes(day) || part.includes(day + 's') || part.includes(dayPattern) || part.includes(dayPattern + 's')) {
+          // Extract time - improved regex to handle various formats
+          const timeMatch = part.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i)
           if (timeMatch) {
             let hour = parseInt(timeMatch[1])
             const minute = timeMatch[2] || '00'
-            const period = timeMatch[3] || (hour >= 8 && hour <= 11 ? 'am' : 'pm')
+            const period = (timeMatch[3] || '').toLowerCase() || (hour >= 8 && hour <= 11 ? 'am' : 'pm')
             
             if (period === 'pm' && hour < 12) hour += 12
             if (period === 'am' && hour === 12) hour = 0
@@ -284,12 +288,16 @@ function Calendar() {
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   
   // Build calendar data - merge recurring schedule + calendar sessions
-  const calendarData = weekDates.map((date, dayIndex) => {
+  // Use useMemo to recalculate when students, reports, calendarSessions, or currentWeek changes
+  const calendarData = useMemo(() => {
+    const dates = getWeekDates()
+    return dates.map((date, dayIndex) => {
     const sessionsForDay = []
     const dateStr = date.toISOString().split('T')[0]
     
     // Add recurring sessions from student schedules
     students.forEach(student => {
+      if (!student.recurring_schedule) return
       const schedule = parseSchedule(student.recurring_schedule)
       schedule.forEach(session => {
         if (session.dayOfWeek === dayIndex) {
@@ -407,6 +415,7 @@ function Calendar() {
       sessions: sessionsForDay.sort((a, b) => a.time.localeCompare(b.time))
     }
   })
+  }, [students, reports, calendarSessions, currentWeek]) // Recalculate when these change
 
   const handleCreateReport = (student, date) => {
     // Navigate to new report page with pre-filled student and date
