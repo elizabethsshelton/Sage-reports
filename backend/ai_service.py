@@ -937,7 +937,7 @@ Text to polish: {text_to_polish}
         if not self.client:
             return {'polished_text': report_text, 'changes': []}
         
-        prompt = f"""Can you keep all of my wording but just clean up any parts that need it in this report and polish/improve a little as needed. Avoid em dashes.
+        prompt = f"""Please polish this report for me. Keep my wording but revise/improve as needed, as is appropriate for the context. Avoid em dashes.
 
 IMPORTANT: After the polished report, list ALL the changes you made in this exact format:
 ---CHANGES---
@@ -957,7 +957,7 @@ Report to polish:
             response = openai_client.chat.completions.create(
                 model='gpt-4o',  # Using most powerful model as requested
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,  # Lower temperature for more precise editing
+                temperature=0.6,  # Increased for more creative improvements while staying controlled
                 max_tokens=4000  # Allow for longer reports
             )
             
