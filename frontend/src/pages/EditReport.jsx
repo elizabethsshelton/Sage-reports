@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2, Contact, X, Send, AlertCircle } from 'lucide-react'
-import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport, addContactToReport, suggestOpeningClosing, askAIAboutText, getSynonyms, reviewPhrases } from '../services/api'
+import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, polishFullReport, generateReport, addContactToReport, suggestOpeningClosing, askAIAboutText, getSynonyms, reviewPhrases } from '../services/api'
 
 function EditReport() {
   const { id } = useParams()
@@ -64,6 +64,12 @@ function EditReport() {
   const [loadingSynonyms, setLoadingSynonyms] = useState(false)
   const [showSynonyms, setShowSynonyms] = useState(false)
   const [wordPosition, setWordPosition] = useState({ start: 0, end: 0 })
+  
+  // Polish Full Report
+  const [loadingPolish, setLoadingPolish] = useState(false)
+  const [polishChanges, setPolishChanges] = useState([])
+  const [showPolishChanges, setShowPolishChanges] = useState(false)
+  const [originalBeforePolish, setOriginalBeforePolish] = useState('')
   
   // Auto-save
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved') // 'saving', 'saved', 'error'
@@ -228,6 +234,51 @@ function EditReport() {
     } finally {
       setRegenerating(false)
     }
+  }
+
+  const handlePolishFullReport = async () => {
+    if (!editedReport) return
+    
+    setLoadingPolish(true)
+    setOriginalBeforePolish(editedReport) // Save original for undo
+    
+    try {
+      const result = await polishFullReport(id, editedReport)
+      
+      if (result.error) {
+        alert(`Error polishing report: ${result.error}`)
+        return
+      }
+      
+      // Update the report with polished version
+      setEditedReport(result.polished_text)
+      setPolishChanges(result.changes || [])
+      setShowPolishChanges(true)
+      
+      console.log('✨ Report polished successfully')
+    } catch (error) {
+      console.error('Error polishing report:', error)
+      alert('Error polishing report. Please try again.')
+    } finally {
+      setLoadingPolish(false)
+    }
+  }
+
+  const handleUndoPolish = () => {
+    if (originalBeforePolish) {
+      setEditedReport(originalBeforePolish)
+      setShowPolishChanges(false)
+      setPolishChanges([])
+      setOriginalBeforePolish('')
+      console.log('↩️ Undid polish')
+    }
+  }
+
+  const handleAcceptPolish = () => {
+    setShowPolishChanges(false)
+    setPolishChanges([])
+    setOriginalBeforePolish('') // Clear undo history after accepting
+    console.log('✅ Accepted polished version')
   }
 
   const handleFixGrammar = async () => {
@@ -977,6 +1028,16 @@ function EditReport() {
                   <Sparkles className="w-4 h-4 mr-2" />
                   {fixingGrammar ? 'Fixing...' : 'Fix Grammar'}
                 </button>
+
+                <button
+                  onClick={handlePolishFullReport}
+                  disabled={loadingPolish || saving || regenerating}
+                  className="px-6 py-2.5 bg-amber-50 text-amber-700 font-medium rounded-xl hover:bg-amber-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-amber-200"
+                  title="Clean up and polish your report with GPT-4o (keeps your wording, improves clarity)"
+                >
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  {loadingPolish ? 'Polishing...' : 'Polish Report'}
+                </button>
                 
                 <button
                   onClick={() => setShowRegenerateModal(true)}
@@ -1228,6 +1289,79 @@ function EditReport() {
                 Regenerate
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Polish Changes Sidebar */}
+      {showPolishChanges && (
+        <div className="fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-40 flex flex-col border-l border-gray-200">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wand2 className="w-5 h-5" />
+              <h3 className="font-semibold">Polish Changes</h3>
+            </div>
+            <button
+              onClick={() => setShowPolishChanges(false)}
+              className="text-white hover:text-amber-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Undo/Accept Buttons */}
+          <div className="p-4 bg-amber-50 border-b border-amber-200 flex gap-2">
+            <button
+              onClick={handleUndoPolish}
+              disabled={!originalBeforePolish}
+              className="flex-1 px-4 py-2 bg-white text-amber-700 font-medium rounded-lg hover:bg-amber-100 transition-colors border-2 border-amber-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <Undo2 className="w-4 h-4" />
+              Undo Polish
+            </button>
+            <button
+              onClick={handleAcceptPolish}
+              className="flex-1 px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Check className="w-4 h-4" />
+              Accept
+            </button>
+          </div>
+
+          {/* Changes List */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-amber-800">
+                {polishChanges.length} {polishChanges.length === 1 ? 'change' : 'changes'} made
+              </p>
+              <p className="text-xs text-gray-600 mt-1">
+                Your report has been polished with GPT-4o. Review the changes and accept or undo.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {polishChanges.map((change, idx) => (
+                <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-shrink-0 w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                      {idx + 1}
+                    </div>
+                    <div className="flex-1 text-sm text-gray-700">
+                      {change.description}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {polishChanges.length === 0 && (
+              <div className="text-center text-gray-500 text-sm mt-8">
+                <Wand2 className="w-12 h-12 mx-auto mb-3 text-amber-300" />
+                <p>No specific changes listed</p>
+                <p className="text-xs mt-2">The report was polished successfully</p>
+              </div>
+            )}
           </div>
         </div>
       )}

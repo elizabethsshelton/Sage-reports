@@ -537,6 +537,25 @@ def polish_report_text(report_id):
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/api/reports/<int:report_id>/polish-full-report', methods=['POST'])
+def polish_full_report(report_id):
+    """Polish entire report using GPT-4o with change tracking"""
+    data = request.json
+    
+    try:
+        report_text = data.get('report_text', '')
+        
+        if not report_text:
+            return jsonify({'error': 'No report text provided'}), 400
+        
+        # Polish the full report
+        result = ai_service.polish_full_report(report_text)
+        
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
 @app.route('/api/reports/<int:report_id>/ask-ai', methods=['POST'])
 def ask_ai_about_text(report_id):
     """Ask AI questions about selected text"""

@@ -924,6 +924,78 @@ Text to polish: {text_to_polish}
             print(f"Error polishing text: {e}")
             return text_to_polish
     
+    def polish_full_report(self, report_text: str) -> Dict:
+        """Polish entire report using GPT-4o, tracking all changes made
+        
+        Returns:
+            {
+                'polished_text': str,
+                'changes': [{'type': 'addition|deletion|modification', 'original': str, 'polished': str, 'context': str}]
+            }
+        """
+        
+        if not self.client:
+            return {'polished_text': report_text, 'changes': []}
+        
+        prompt = f"""Can you keep all of my wording but just clean up any parts that need it in this report and polish/improve a little as needed. Avoid em dashes.
+
+IMPORTANT: After the polished report, list ALL the changes you made in this exact format:
+---CHANGES---
+- Changed "original phrase" to "new phrase" (reason)
+- Fixed "original" to "new" (reason)
+etc.
+
+Report to polish:
+
+{report_text}"""
+
+        try:
+            # Force OpenAI with GPT-4o for this feature
+            from openai import OpenAI
+            openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            
+            response = openai_client.chat.completions.create(
+                model='gpt-4o',  # Using most powerful model as requested
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,  # Lower temperature for more precise editing
+                max_tokens=4000  # Allow for longer reports
+            )
+            
+            full_response = response.choices[0].message.content.strip()
+            
+            # Split response into polished text and changes
+            if '---CHANGES---' in full_response:
+                parts = full_response.split('---CHANGES---')
+                polished_text = parts[0].strip()
+                changes_text = parts[1].strip() if len(parts) > 1 else ""
+                
+                # Parse changes into structured format
+                changes = []
+                for line in changes_text.split('\n'):
+                    line = line.strip()
+                    if line.startswith('-') or line.startswith('•'):
+                        # Extract change details
+                        changes.append({
+                            'description': line.lstrip('-').lstrip('•').strip()
+                        })
+            else:
+                # If AI didn't follow format, just return the text
+                polished_text = full_response
+                changes = [{'description': 'Report polished (changes not detailed)'}]
+            
+            return {
+                'polished_text': polished_text,
+                'changes': changes
+            }
+        
+        except Exception as e:
+            print(f"Error polishing full report: {e}")
+            return {
+                'polished_text': report_text,
+                'changes': [],
+                'error': str(e)
+            }
+    
     def fix_grammar(self, report_text: str) -> str:
         """Fix grammar and spelling while preserving exact wording and structure"""
         
