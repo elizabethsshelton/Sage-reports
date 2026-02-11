@@ -126,16 +126,26 @@ export const suggestOpeningClosing = async (reportId, sentenceType) => {
   return response.data
 }
 
-export const suggestSynonyms = async (reportId, word, context = '') => {
-  const response = await api.post(`/reports/${reportId}/suggest-synonyms`, { 
+export const askAIAboutText = async (reportId, selectedText, question, fullReport, conversationHistory = []) => {
+  const response = await api.post(`/reports/${reportId}/ask-ai`, {
+    selected_text: selectedText,
+    question: question,
+    full_report: fullReport,
+    conversation_history: conversationHistory
+  })
+  return response.data
+}
+
+export const getSynonyms = async (reportId, word, context) => {
+  const response = await api.post(`/reports/${reportId}/get-synonyms`, {
     word: word,
     context: context
   })
   return response.data
 }
 
-export const reviewReportPhrases = async (reportId, reportText) => {
-  const response = await api.post(`/reports/${reportId}/review-phrases`, { 
+export const reviewPhrases = async (reportId, reportText) => {
+  const response = await api.post(`/reports/${reportId}/review-phrases`, {
     report_text: reportText
   })
   return response.data

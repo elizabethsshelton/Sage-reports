@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2, Contact } from 'lucide-react'
-import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport, addContactToReport, suggestOpeningClosing, suggestSynonyms, reviewReportPhrases } from '../services/api'
+import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2, Contact, X, Send, AlertCircle } from 'lucide-react'
+import { getReport, updateReport, deleteReport, getStudents, fixReportGrammar, suggestSentences, polishText, generateReport, addContactToReport, suggestOpeningClosing, askAIAboutText, getSynonyms, reviewPhrases } from '../services/api'
 
 function EditReport() {
   const { id } = useParams()
@@ -41,55 +41,39 @@ function EditReport() {
   const [originalClosing, setOriginalClosing] = useState('')
   const [hasChangedOpening, setHasChangedOpening] = useState(false)
   const [hasChangedClosing, setHasChangedClosing] = useState(false)
-  const [lastSavedContent, setLastSavedContent] = useState('')
-  const [autoSaveStatus, setAutoSaveStatus] = useState('') // 'saving', 'saved', 'error'
+  
+  // Ask AI feature
+  const [showAskAI, setShowAskAI] = useState(false)
+  const [selectedTextForAI, setSelectedTextForAI] = useState('')
+  const [aiChatHistory, setAiChatHistory] = useState([])
+  const [currentAIQuestion, setCurrentAIQuestion] = useState('')
+  const [loadingAIAnswer, setLoadingAIAnswer] = useState(false)
+  
+  // Regenerate with instructions
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  const [regenerateInstructions, setRegenerateInstructions] = useState('')
+  
+  // Review Report feature
+  const [reviewSuggestions, setReviewSuggestions] = useState([])
+  const [loadingReview, setLoadingReview] = useState(false)
+  const [activeSuggestion, setActiveSuggestion] = useState(null)
+  
+  // Synonym finder
   const [selectedWord, setSelectedWord] = useState('')
   const [synonyms, setSynonyms] = useState([])
   const [loadingSynonyms, setLoadingSynonyms] = useState(false)
   const [showSynonyms, setShowSynonyms] = useState(false)
   const [wordPosition, setWordPosition] = useState({ start: 0, end: 0 })
-  const [reviewSuggestions, setReviewSuggestions] = useState([])
-  const [reviewing, setReviewing] = useState(false)
-  const [activeSuggestion, setActiveSuggestion] = useState(null)
-  const [editedSuggestion, setEditedSuggestion] = useState('') // For editing suggestions in popup
-  const [textareaHeight, setTextareaHeight] = useState(0) // Height of textarea for indicator positioning
+  
+  // Auto-save
+  const [autoSaveStatus, setAutoSaveStatus] = useState('saved') // 'saving', 'saved', 'error'
+  
   const textareaRef = useRef(null)
-  const indicatorBarRef = useRef(null)
-  const autoSaveTimeoutRef = useRef(null)
-  const isInitialLoadRef = useRef(true)
+  const aiChatEndRef = useRef(null)
 
   useEffect(() => {
     loadReport()
     loadStudents()
-    
-    // Load from localStorage if available (backup)
-    const savedContent = localStorage.getItem(`report_${id}_backup`)
-    if (savedContent) {
-      try {
-        const parsed = JSON.parse(savedContent)
-        // Only use if it's newer than 1 hour old
-        if (Date.now() - parsed.timestamp < 3600000) {
-          setEditedReport(parsed.content)
-          console.log('Restored from localStorage backup')
-        }
-      } catch (e) {
-        console.error('Error parsing localStorage backup:', e)
-      }
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current)
-      }
-      // Save to localStorage as backup before leaving
-      if (editedReport && editedReport !== lastSavedContent) {
-        localStorage.setItem(`report_${id}_backup`, JSON.stringify({
-          content: editedReport,
-          timestamp: Date.now()
-        }))
-      }
-    }
   }, [id])
 
   useEffect(() => {
@@ -99,38 +83,14 @@ function EditReport() {
     }
   }, [report])
 
-  // Auto-save effect - debounced
+  // Auto-save functionality - saves 2 seconds after user stops typing
   useEffect(() => {
-    // Skip auto-save on initial load
-    if (isInitialLoadRef.current) {
-      isInitialLoadRef.current = false
-      setLastSavedContent(editedReport)
-      return
+    if (!report || !editedReport || editedReport === report.final_report) {
+      return // Don't save if no changes
     }
 
-    // Skip if content hasn't changed
-    if (editedReport === lastSavedContent) {
-      return
-    }
-
-    // Clear existing timeout
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current)
-    }
-
-    // Save to localStorage immediately as backup
-    localStorage.setItem(`report_${id}_backup`, JSON.stringify({
-      content: editedReport,
-      timestamp: Date.now()
-    }))
-
-    // Set debounced auto-save (2 seconds after user stops typing)
-    autoSaveTimeoutRef.current = setTimeout(async () => {
-      if (!report || editedReport === lastSavedContent) {
-        return
-      }
-
-      setAutoSaveStatus('saving')
+    setAutoSaveStatus('saving')
+    const saveTimer = setTimeout(async () => {
       try {
         await updateReport(id, {
           final_report: editedReport,
@@ -140,125 +100,19 @@ function EditReport() {
           session_date: sessionDate,
           next_session_notes: nextSessionNotes
         })
-        setLastSavedContent(editedReport)
         setAutoSaveStatus('saved')
+        console.log('✅ Auto-saved at', new Date().toLocaleTimeString())
         
-        // Clear localStorage backup after successful save
-        localStorage.removeItem(`report_${id}_backup`)
-        
-        // Clear status message after 3 seconds
-        setTimeout(() => setAutoSaveStatus(''), 3000)
+        // Update report state to match saved version
+        setReport(prev => ({ ...prev, final_report: editedReport }))
       } catch (error) {
-        console.error('Error auto-saving report:', error)
+        console.error('Auto-save error:', error)
         setAutoSaveStatus('error')
-        setTimeout(() => setAutoSaveStatus(''), 5000)
       }
-    }, 2000)
+    }, 2000) // Save 2 seconds after last keystroke
 
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current)
-      }
-    }
-  }, [editedReport, id, report, status, useForTraining, selectedStudentId, sessionDate, nextSessionNotes, lastSavedContent])
-
-  // Warn before leaving with unsaved changes
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (editedReport !== lastSavedContent && editedReport.trim() !== '') {
-        e.preventDefault()
-        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?'
-        return e.returnValue
-      }
-    }
-
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [editedReport, lastSavedContent])
-
-  // Update textarea height when content changes
-  useEffect(() => {
-    if (textareaRef.current) {
-      setTextareaHeight(textareaRef.current.scrollHeight)
-    }
-  }, [editedReport, reviewSuggestions.length])
-
-
-  // Helper function to get exact pixel position of text in textarea
-  const getTextPosition = (textarea, charIndex) => {
-    if (!textarea || charIndex < 0) return { top: 0, left: 0 }
-    
-    // Create a mirror div with same styling to measure exact position
-    const mirror = document.createElement('div')
-    const computedStyle = window.getComputedStyle(textarea)
-    
-    // Copy all relevant styles from textarea
-    const stylesToCopy = [
-      'fontFamily', 'fontSize', 'fontWeight', 'lineHeight',
-      'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight',
-      'borderTopWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderRightWidth',
-      'boxSizing', 'whiteSpace', 'wordWrap', 'wordBreak', 'letterSpacing'
-    ]
-    
-    stylesToCopy.forEach(prop => {
-      mirror.style[prop] = computedStyle[prop]
-    })
-    
-    // Set up mirror for measurement
-    mirror.style.position = 'absolute'
-    mirror.style.visibility = 'hidden'
-    mirror.style.top = '-9999px'
-    mirror.style.left = '-9999px'
-    mirror.style.width = `${textarea.clientWidth}px`
-    mirror.style.whiteSpace = 'pre-wrap'
-    mirror.style.wordWrap = 'break-word'
-    mirror.style.overflow = 'hidden'
-    
-    // Set text content up to the character index
-    const textBefore = editedReport.substring(0, charIndex)
-    mirror.textContent = textBefore
-    
-    document.body.appendChild(mirror)
-    
-    // Get the height of the text before the character
-    const height = mirror.offsetHeight
-    const lineHeight = parseFloat(computedStyle.lineHeight) || 20
-    const paddingTop = parseFloat(computedStyle.paddingTop) || 8
-    
-    // Calculate position at center of the line
-    // The height gives us the total pixel height, so we divide by line height to get line number
-    const lineNumber = Math.floor((height - paddingTop) / lineHeight)
-    const topPosition = paddingTop + (lineNumber * lineHeight) + (lineHeight / 2)
-    
-    document.body.removeChild(mirror)
-    
-    return {
-      top: topPosition,
-      left: 0
-    }
-  }
-
-  // Sync indicator bar scroll with textarea
-  useEffect(() => {
-    const textarea = textareaRef.current
-    const indicatorBar = indicatorBarRef.current
-    
-    if (!textarea || !indicatorBar) return
-    
-    const syncScroll = () => {
-      indicatorBar.scrollTop = textarea.scrollTop
-    }
-    
-    // Initial sync
-    syncScroll()
-    
-    textarea.addEventListener('scroll', syncScroll)
-    return () => {
-      textarea.removeEventListener('scroll', syncScroll)
-    }
-  }, [reviewSuggestions.length, textareaHeight])
+    return () => clearTimeout(saveTimer)
+  }, [editedReport, id, status, useForTraining, selectedStudentId, sessionDate, nextSessionNotes])
 
   const loadStudents = async () => {
     try {
@@ -273,21 +127,12 @@ function EditReport() {
     try {
       const data = await getReport(id)
       setReport(data)
-      
-      // Always prioritize final_report if it exists (user's edits)
-      // Only fall back to ai_generated_report if final_report is empty
-      const contentToLoad = data.final_report || data.ai_generated_report || ''
-      setEditedReport(contentToLoad)
-      setLastSavedContent(contentToLoad)
-      
+      setEditedReport(data.final_report || data.ai_generated_report || '')
       setStatus(data.status || 'draft')
       setUseForTraining(data.use_for_training || false)
       setSelectedStudentId(data.student_id || '')
       setSessionDate(data.session_date ? data.session_date.split('T')[0] : '')
       setNextSessionNotes(data.next_session_notes || '')
-      
-      // Clear localStorage backup after successful load
-      localStorage.removeItem(`report_${id}_backup`)
     } catch (error) {
       console.error('Error loading report:', error)
       alert('Error loading report')
@@ -308,12 +153,6 @@ function EditReport() {
         session_date: sessionDate,
         next_session_notes: nextSessionNotes
       })
-      setLastSavedContent(editedReport)
-      setAutoSaveStatus('saved')
-      
-      // Clear localStorage backup after successful save
-      localStorage.removeItem(`report_${id}_backup`)
-      
       alert('Report saved successfully!')
       loadReport() // Reload to get updated student name
     } catch (error) {
@@ -335,13 +174,8 @@ function EditReport() {
         session_date: sessionDate,
         next_session_notes: nextSessionNotes
       })
-      setLastSavedContent(editedReport)
       setStatus('sent')
       setUseForTraining(true)
-      
-      // Clear localStorage backup after successful finalize
-      localStorage.removeItem(`report_${id}_backup`)
-      
       alert('✅ Report finalized and added to training data! This report will now help improve future AI generations.')
       setTimeout(() => navigate('/reports'), 1500)
     } catch (error) {
@@ -367,12 +201,10 @@ function EditReport() {
     }
   }
 
-  const handleRegenerate = async () => {
-    if (!window.confirm('This will generate a completely new report from scratch. Your current edits will be replaced. Continue?')) {
-      return
-    }
-    
+  const handleRegenerate = async (instructions = '') => {
+    setShowRegenerateModal(false)
     setRegenerating(true)
+    
     try {
       // Regenerate the report using the original data
       const regeneratedReport = await generateReport({
@@ -382,13 +214,13 @@ function EditReport() {
         topics_covered: report.topics_covered,
         activities: report.activities,
         notes: report.notes,
+        ai_instructions: instructions,
         include_contact: false  // User can manually add this if needed
       })
       
       // Update the edited report with the new AI-generated content
-      const newContent = regeneratedReport.ai_generated_report
-      setEditedReport(newContent)
-      // Note: Don't update lastSavedContent here - let auto-save handle it
+      setEditedReport(regeneratedReport.ai_generated_report)
+      setRegenerateInstructions('')
       alert('Report regenerated! Review the new version and save when ready.')
     } catch (error) {
       console.error('Error regenerating report:', error)
@@ -532,176 +364,11 @@ function EditReport() {
     }
   }
 
-  const handleLoadSynonyms = async (word, fullText, cursorPosition) => {
-    if (!word || word.length < 2) {
-      setSynonyms([])
-      setShowSynonyms(false)
-      return
-    }
-    
-    setLoadingSynonyms(true)
-    setShowSynonyms(true)
-    
-    try {
-      // Get context around the word (100 chars before and after)
-      const contextStart = Math.max(0, cursorPosition - 100)
-      const contextEnd = Math.min(fullText.length, cursorPosition + word.length + 100)
-      const context = fullText.substring(contextStart, contextEnd)
-      
-      const result = await suggestSynonyms(id, word, context)
-      setSynonyms(result.synonyms || [])
-    } catch (error) {
-      console.error('Error loading synonyms:', error)
-      setSynonyms([])
-    } finally {
-      setLoadingSynonyms(false)
-    }
-  }
-
-  const handleReplaceWord = (synonym) => {
-    const textarea = textareaRef.current
-    if (!textarea || !selectedWord) return
-    
-    const { start, end } = wordPosition
-    const textBefore = editedReport.substring(0, start)
-    const textAfter = editedReport.substring(end)
-    
-    // Preserve any punctuation that was part of the selection
-    const selectedWithPunct = editedReport.substring(start, end)
-    const leadingPunct = selectedWithPunct.match(/^[^\w]+/)?.[0] || ''
-    const trailingPunct = selectedWithPunct.match(/[^\w]+$/)?.[0] || ''
-    
-    const newText = textBefore + leadingPunct + synonym + trailingPunct + textAfter
-    setEditedReport(newText)
-    
-    // Clear selection and synonyms
-    setSelectedWord('')
-    setSynonyms([])
-    setShowSynonyms(false)
-    setSelectedText('')
-    
-    // Set cursor after the replaced word
-    setTimeout(() => {
-      const newPos = start + leadingPunct.length + synonym.length + trailingPunct.length
-      textarea.focus()
-      textarea.setSelectionRange(newPos, newPos)
-    }, 0)
-  }
-
-  const handleReviewReport = async () => {
-    setReviewing(true)
-    setReviewSuggestions([])
-    setActiveSuggestion(null)
-    
-    try {
-      const result = await reviewReportPhrases(id, editedReport)
-      const suggestions = result.suggestions || []
-      
-      // Validate and log suggestions for debugging
-      console.log('=== REVIEW SUGGESTIONS DEBUG ===')
-      console.log('Report length:', editedReport.length)
-      console.log('Number of suggestions:', suggestions.length)
-      
-      const validated = suggestions.map((s, idx) => {
-        const textAtIndices = editedReport.substring(s.start_index, s.end_index)
-        const originalLower = s.original.toLowerCase().trim()
-        const textAtIndicesLower = textAtIndices.toLowerCase().trim()
-        const matches = textAtIndicesLower.includes(originalLower.slice(0, Math.min(30, originalLower.length))) || 
-                       originalLower.includes(textAtIndicesLower.slice(0, Math.min(30, textAtIndicesLower.length)))
-        
-        console.log(`Suggestion ${idx}:`, {
-          original: s.original.substring(0, 50),
-          start: s.start_index,
-          end: s.end_index,
-          textAtIndices: textAtIndices.substring(0, 50),
-          matches: matches,
-          length: textAtIndices.length
-        })
-        
-        // Show context around the indices
-        const contextStart = Math.max(0, s.start_index - 20)
-        const contextEnd = Math.min(editedReport.length, s.end_index + 20)
-        const context = editedReport.substring(contextStart, contextEnd)
-        console.log(`  Context: "...${context}..."`)
-        
-        return s
-      }).filter(s => {
-        // Only keep suggestions where the text at indices makes sense
-        const textAtIndices = editedReport.substring(s.start_index, s.end_index)
-        const isValid = textAtIndices.length > 0 && s.start_index >= 0 && s.end_index <= editedReport.length
-        if (!isValid) {
-          console.warn(`  ❌ Invalid suggestion ${s.start_index}-${s.end_index}`)
-        }
-        return isValid
-      })
-      
-      console.log(`Validated: ${validated.length} out of ${suggestions.length} suggestions`)
-      console.log('=== END DEBUG ===')
-      
-      setReviewSuggestions(validated)
-    } catch (error) {
-      console.error('Error reviewing report:', error)
-      alert('Error reviewing report. Please try again.')
-    } finally {
-      setReviewing(false)
-    }
-  }
-
-  const handleApplySuggestion = (suggestion, chosenAlternative) => {
-    const { start_index, end_index } = suggestion
-    
-    // Use the chosen alternative (which is the text from the textarea)
-    const textToApply = chosenAlternative.trim()
-    
-    // Validate indices are within bounds
-    if (start_index < 0 || end_index > editedReport.length || start_index >= end_index) {
-      console.error('Invalid indices for suggestion:', { start_index, end_index, reportLength: editedReport.length })
-      alert('Error: Could not apply suggestion. The text may have changed. Please try reviewing the report again.')
-      return
-    }
-    
-    // Get the actual text at these indices to verify
-    const actualText = editedReport.substring(start_index, end_index)
-    console.log('Applying suggestion:', {
-      start_index,
-      end_index,
-      original: suggestion.original,
-      actualText,
-      textToApply
-    })
-    
-    const textBefore = editedReport.substring(0, start_index)
-    const textAfter = editedReport.substring(end_index)
-    
-    const newText = textBefore + textToApply + textAfter
-    setEditedReport(newText)
-    
-    // Remove this suggestion from the list
-    setReviewSuggestions(prev => prev.filter(s => s !== suggestion))
-    setActiveSuggestion(null)
-    setEditedSuggestion('')
-    
-    // Update indices for remaining suggestions
-    const offset = textToApply.length - (end_index - start_index)
-    setReviewSuggestions(prev => prev.map(s => {
-      if (s.start_index > end_index) {
-        return { ...s, start_index: s.start_index + offset, end_index: s.end_index + offset }
-      }
-      return s
-    }))
-  }
-
-  const handleDismissSuggestion = (suggestion) => {
-    setReviewSuggestions(prev => prev.filter(s => s !== suggestion))
-    setActiveSuggestion(null)
-  }
-
   const handleAddContact = async () => {
     setAddingContact(true)
     try {
       const result = await addContactToReport(id)
       setEditedReport(result.report_text)
-      // Auto-save will handle saving this change
       if (result.message) {
         alert(result.message)
       } else {
@@ -823,6 +490,59 @@ function EditReport() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  // Ask AI handler
+  const handleAskAI = async () => {
+    if (!currentAIQuestion.trim()) return
+    
+    const newQuestion = { question: currentAIQuestion, answer: null }
+    setAiChatHistory([...aiChatHistory, newQuestion])
+    setCurrentAIQuestion('')
+    setLoadingAIAnswer(true)
+    
+    try {
+      const response = await askAIAboutText(id, selectedTextForAI, currentAIQuestion, editedReport, aiChatHistory)
+      setAiChatHistory(prev => {
+        const updated = [...prev]
+        updated[updated.length - 1].answer = response.answer
+        return updated
+      })
+    } catch (error) {
+      console.error('Error asking AI:', error)
+      setAiChatHistory(prev => {
+        const updated = [...prev]
+        updated[updated.length - 1].answer = "Sorry, I couldn't process that question. Please try again."
+        return updated
+      })
+    } finally {
+      setLoadingAIAnswer(false)
+    }
+  }
+
+  // Synonym handler
+  const handleLoadSynonyms = async (word, context, position) => {
+    setLoadingSynonyms(true)
+    try {
+      const response = await getSynonyms(id, word, context)
+      setSynonyms(response.synonyms || [])
+      setShowSynonyms(true)
+    } catch (error) {
+      console.error('Error loading synonyms:', error)
+      setSynonyms([])
+    } finally {
+      setLoadingSynonyms(false)
+    }
+  }
+
+  const handleReplaceSynonym = (synonym) => {
+    const before = editedReport.substring(0, wordPosition.start)
+    const after = editedReport.substring(wordPosition.end)
+    const newReport = before + synonym + after
+    setEditedReport(newReport)
+    setShowSynonyms(false)
+    setSynonyms([])
+    setSelectedWord('')
   }
 
   if (loading) {
@@ -948,23 +668,16 @@ function EditReport() {
           <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-              <h3 className="text-lg font-semibold text-sage-800">Final Report</h3>
+                <h3 className="text-lg font-semibold text-sage-800">Final Report</h3>
+                {/* Auto-save status indicator */}
                 {autoSaveStatus === 'saving' && (
-                  <span className="text-xs text-sage-600 flex items-center gap-1">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-sage-600"></div>
-                    Auto-saving...
-                  </span>
+                  <span className="text-xs text-gray-500 italic">Saving...</span>
                 )}
                 {autoSaveStatus === 'saved' && (
-                  <span className="text-xs text-green-600 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" />
-                    Auto-saved
-                  </span>
+                  <span className="text-xs text-green-600 italic">✓ Saved</span>
                 )}
                 {autoSaveStatus === 'error' && (
-                  <span className="text-xs text-red-600 flex items-center gap-1">
-                    Auto-save failed - click Save manually
-                  </span>
+                  <span className="text-xs text-red-600 italic">⚠ Save failed</span>
                 )}
               </div>
               <div className="flex space-x-2">
@@ -1067,264 +780,82 @@ function EditReport() {
               )}
             </div>
 
-            {/* Textarea with highlight overlay and side indicators */}
-            <div className="relative flex gap-2">
-              {/* Side indicator bar for suggestions - positioned to scroll with textarea */}
-              {reviewSuggestions.length > 0 && (
-                <div 
-                  className="relative" 
-                  style={{ minWidth: '24px', width: '24px' }}
-                >
-                  {/* Container that matches textarea height and scrolls with it */}
-                  <div 
-                    ref={indicatorBarRef}
-                    className="absolute inset-0 overflow-y-auto overflow-x-hidden pointer-events-none"
-                    style={{
-                      scrollbarWidth: 'none',
-                      msOverflowStyle: 'none',
-                      paddingTop: '8px'
-                    }}
-                  >
-                    <style>{`
-                      .indicator-scroll::-webkit-scrollbar {
-                        display: none;
-                      }
-                    `}</style>
-                    <div className="relative" style={{ 
-                      minHeight: textareaHeight > 0 ? `${textareaHeight}px` : '100%',
-                      height: textareaHeight > 0 ? `${textareaHeight}px` : 'auto'
-                    }}>
-                      {reviewSuggestions.map((suggestion, idx) => {
-                        // Use the helper function to get exact pixel position
-                        const textarea = textareaRef.current
-                        const position = getTextPosition(textarea, suggestion.start_index)
-                        const topPosition = position.top
-                        
-                        // Different colors for each suggestion
-                        const colorClasses = [
-                          'bg-blue-400 hover:bg-blue-500 border-blue-500',
-                          'bg-purple-400 hover:bg-purple-500 border-purple-500',
-                          'bg-pink-400 hover:bg-pink-500 border-pink-500',
-                          'bg-indigo-400 hover:bg-indigo-500 border-indigo-500',
-                          'bg-teal-400 hover:bg-teal-500 border-teal-500',
-                          'bg-orange-400 hover:bg-orange-500 border-orange-500',
-                          'bg-cyan-400 hover:bg-cyan-500 border-cyan-500',
-                          'bg-rose-400 hover:bg-rose-500 border-rose-500',
-                        ]
-                        const colorClass = colorClasses[idx % colorClasses.length]
-                        
-                        return (
-                          <div
-                            key={idx}
-                            className="group relative pointer-events-auto"
-                            style={{
-                              position: 'absolute',
-                              top: `${topPosition}px`,
-                              left: '0',
-                              transform: 'translateY(-50%)'
-                            }}
-                          >
-                            <button
-                              onClick={() => {
-                                setActiveSuggestion(suggestion)
-                                setEditedSuggestion(suggestion.original) // Pre-fill with current text
-                                // Scroll to the text in textarea
-                                if (textareaRef.current) {
-                                  textareaRef.current.focus()
-                                  textareaRef.current.setSelectionRange(suggestion.start_index, suggestion.end_index)
-                                  // Scroll to show the suggestion
-                                  const textarea = textareaRef.current
-                                  const computedStyle = window.getComputedStyle(textarea)
-                                  const lineHeight = parseFloat(computedStyle.lineHeight) || 20
-                                  const textBefore = editedReport.substring(0, suggestion.start_index)
-                                  const linesBefore = textBefore.split('\n').length
-                                  textarea.scrollTop = Math.max(0, (linesBefore - 5) * lineHeight)
-                                }
-                              }}
-                              className={`w-4 h-4 rounded-full ${colorClass} transition-all cursor-pointer border-2 shadow-sm hover:scale-125`}
-                              title={suggestion.issue}
-                            />
-                            {/* Tooltip on hover - shows the reasoning */}
-                            <div className="absolute left-7 top-1/2 -translate-y-1/2 bg-sage-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
-                              {suggestion.issue}
-                              <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full">
-                                <div className="border-4 border-transparent border-r-sage-800"></div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div className="relative flex-1">
             <textarea
               ref={textareaRef}
               value={editedReport}
-                onChange={(e) => {
-                  setEditedReport(e.target.value)
-                  // Update indices for suggestions when text changes
-                  // We'll keep suggestions but they may need to be re-validated
-                }}
+              onChange={(e) => setEditedReport(e.target.value)}
               onSelect={(e) => {
                 const start = e.target.selectionStart
                 const end = e.target.selectionEnd
-                  const selected = editedReport.substring(start, end)
-                  
+                const selected = editedReport.substring(start, end)
+                
                 if (start !== end) {
-                    setSelectedText(selected)
-                    
-                    // Check if it's a single word (no spaces, punctuation only at edges)
-                    const wordPattern = /^[\w'-]+$/
-                    const cleanSelected = selected.trim().replace(/^[^\w]+|[^\w]+$/g, '')
-                    
-                    if (cleanSelected && wordPattern.test(cleanSelected) && cleanSelected.length > 1) {
-                      // It's a single word - show synonyms
-                      setSelectedWord(cleanSelected)
-                      setWordPosition({ start, end })
-                      handleLoadSynonyms(cleanSelected, editedReport, start)
-                    } else {
-                      // It's multiple words or not a word - hide synonyms
-                      setSelectedWord('')
-                      setSynonyms([])
-                      setShowSynonyms(false)
-                    }
-                } else {
-                  setSelectedText('')
+                  setSelectedText(selected)
+                  setSelectedTextForAI(selected)
+                  
+                  // Check if it's a single word (for synonyms)
+                  const wordPattern = /^[\w'-]+$/
+                  const cleanSelected = selected.trim().replace(/^[^\w]+|[^\w]+$/g, '')
+                  
+                  if (cleanSelected && wordPattern.test(cleanSelected) && cleanSelected.length > 1) {
+                    // Single word - show synonyms
+                    setSelectedWord(cleanSelected)
+                    setWordPosition({ start, end })
+                    handleLoadSynonyms(cleanSelected, editedReport, start)
+                  } else {
+                    // Multiple words - hide synonyms
                     setSelectedWord('')
                     setSynonyms([])
                     setShowSynonyms(false)
-                    setActiveSuggestion(null)
+                  }
+                } else {
+                  setSelectedText('')
+                  setSelectedWord('')
+                  setSynonyms([])
+                  setShowSynonyms(false)
                 }
               }}
               rows={25}
-                className="w-full px-3 py-2 border border-sage-300 rounded-lg focus:ring-2 focus:ring-sage-500 focus:border-sage-500 font-mono text-sm relative z-10 bg-transparent"
+              className="w-full px-3 py-2 border border-sage-300 rounded-lg focus:ring-2 focus:ring-sage-500 focus:border-sage-500 font-mono text-sm"
               placeholder="Edit your report here..."
-                style={{ caretColor: 'rgb(55, 65, 81)' }}
-              />
-              
-              </div>
-            </div>
-            
-            {/* Review Controls */}
-            {reviewSuggestions.length > 0 && (
-              <div className="mt-4 flex items-center justify-between p-3 bg-sage-50 rounded-lg border border-sage-200">
-                <div className="flex items-center gap-3">
-                  <Sparkles className="w-4 h-4 text-violet-600" />
-                  <span className="text-sm font-medium text-sage-700">
-                    {reviewSuggestions.length} Suggestion{reviewSuggestions.length !== 1 ? 's' : ''} Found
-                  </span>
-                </div>
-                <button
-                  onClick={() => {
-                    setReviewSuggestions([])
-                    setActiveSuggestion(null)
-                  }}
-                  className="text-sm text-sage-600 hover:text-sage-700 px-3 py-1 rounded hover:bg-sage-100"
-                >
-                  Clear All
-                </button>
-              </div>
+            />
+
+            {/* Ask AI About This Button */}
+            {selectedTextForAI && (
+              <button
+                onClick={() => setShowAskAI(true)}
+                className="mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                Ask AI About This
+              </button>
             )}
-            
-            {/* Suggestion Popup */}
-            {activeSuggestion && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" onClick={() => {
-                setActiveSuggestion(null)
-                setEditedSuggestion('')
-              }}>
-                <div 
-                  className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 transform transition-all"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-sage-800 mb-1">Improve This Phrase</h3>
-                      <p className="text-sm text-sage-600">{activeSuggestion.issue}</p>
-                    </div>
+
+            {/* Synonym Popup */}
+            {showSynonyms && synonyms.length > 0 && (
+              <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold text-blue-900">Synonyms for "{selectedWord}":</p>
+                  <button
+                    onClick={() => {
+                      setShowSynonyms(false)
+                      setSynonyms([])
+                    }}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {synonyms.map((synonym, idx) => (
                     <button
-                      onClick={() => {
-                        setActiveSuggestion(null)
-                        setEditedSuggestion('')
-                      }}
-                      className="text-sage-400 hover:text-sage-600 transition-colors"
+                      key={idx}
+                      onClick={() => handleReplaceSynonym(synonym)}
+                      className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-sm transition-colors"
                     >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      {synonym}
                     </button>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <p className="text-xs font-medium text-sage-600 mb-2">Edit the text below, or click a suggestion to use it:</p>
-                    <textarea
-                      ref={(el) => {
-                        // Store ref to textarea for reading value
-                        if (el && !el.dataset.suggestionRef) {
-                          el.dataset.suggestionRef = 'true'
-                        }
-                      }}
-                      value={editedSuggestion !== '' ? editedSuggestion : activeSuggestion.original}
-                      onChange={(e) => setEditedSuggestion(e.target.value)}
-                      className="w-full px-3 py-2 border border-sage-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-sm mb-3 min-h-[80px] font-mono"
-                    />
-                    <div className="space-y-2">
-                      {activeSuggestion.suggestions.map((suggestion, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            setEditedSuggestion(suggestion)
-                          }}
-                          className="w-full text-left px-4 py-3 bg-gradient-to-r from-violet-50 to-purple-50 hover:from-violet-100 hover:to-purple-100 border-2 border-violet-200 hover:border-violet-300 rounded-lg transition-all text-sm text-violet-800 font-medium"
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        handleDismissSuggestion(activeSuggestion)
-                        setActiveSuggestion(null)
-                        setEditedSuggestion('')
-                      }}
-                      className="flex-1 px-4 py-2 bg-red-50 text-red-700 border-2 border-red-200 rounded-lg hover:bg-red-100 hover:border-red-300 transition-colors text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      Remove Suggestion
-                    </button>
-                    <button
-                      onClick={() => {
-                        setActiveSuggestion(null)
-                        setEditedSuggestion('')
-                      }}
-                      className="flex-1 px-4 py-2 bg-sage-200 text-sage-700 rounded-lg hover:bg-sage-300 transition-colors text-sm font-medium"
-                    >
-                      Close (Keep for Later)
-                    </button>
-                    <button
-                      onClick={() => {
-                        // Get the current value from the textarea
-                        // If editedSuggestion is empty string, use original; otherwise use editedSuggestion
-                        const currentValue = editedSuggestion !== '' ? editedSuggestion : activeSuggestion.original
-                        const textToApply = currentValue.trim()
-                        if (!textToApply) {
-                          alert('Please enter some text or select a suggestion.')
-                          return
-                        }
-                        handleApplySuggestion(activeSuggestion, textToApply)
-                      }}
-                      className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors text-sm font-medium"
-                    >
-                      Apply to Report
-                    </button>
-                  </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -1407,50 +938,8 @@ function EditReport() {
               )}
             </div>
 
-            {/* Synonym Suggestions - shown when single word is selected */}
-            {showSynonyms && selectedWord && (
-              <div className="mt-4 mb-4 border border-emerald-200 rounded-lg bg-emerald-50 p-4 animate-fade-in">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-emerald-900">💡 Synonyms for "{selectedWord}":</span>
-                    {loadingSynonyms && (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowSynonyms(false)
-                      setSynonyms([])
-                      setSelectedWord('')
-                    }}
-                    className="text-emerald-600 hover:text-emerald-700 text-sm"
-                  >
-                    ✕
-                  </button>
-                </div>
-                
-                {loadingSynonyms ? (
-                  <p className="text-sm text-emerald-600">Finding synonyms...</p>
-                ) : synonyms.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {synonyms.map((synonym, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleReplaceWord(synonym)}
-                        className="px-3 py-1.5 bg-white border border-emerald-200 rounded-lg hover:bg-emerald-100 hover:border-emerald-300 transition-colors text-sm text-emerald-800"
-                      >
-                        {synonym}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-emerald-600 italic">No synonyms found</p>
-                )}
-              </div>
-            )}
-
             <div className="mt-4 space-y-3">
-              {selectedText && !selectedWord && (
+              {selectedText && (
                 <div className="flex justify-end gap-2 animate-fade-in">
                   <button
                     onClick={handlePolishSelection}
@@ -1478,20 +967,10 @@ function EditReport() {
               )}
               
               {/* AI Action Buttons */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <button
-                  onClick={handleReviewReport}
-                  disabled={reviewing || saving || regenerating}
-                  className="px-6 py-2.5 bg-gradient-to-r from-violet-50 to-purple-50 text-violet-700 font-medium rounded-xl hover:from-violet-100 hover:to-purple-100 transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-violet-200"
-                  title="Review report for improvements (wordiness, tone, clarity, etc.)"
-                >
-                  <Sparkles className={`w-4 h-4 mr-2 ${reviewing ? 'animate-pulse' : ''}`} />
-                  {reviewing ? 'Reviewing...' : 'Review Report'}
-                </button>
-                
+              <div className="grid grid-cols-3 gap-3">
                 <button
                   onClick={handleFixGrammar}
-                  disabled={fixingGrammar || saving || regenerating || reviewing}
+                  disabled={fixingGrammar || saving || regenerating}
                   className="px-6 py-2.5 bg-purple-50 text-purple-700 font-medium rounded-xl hover:bg-purple-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-purple-200"
                   title="Fix grammar and spelling while keeping your exact wording"
                 >
@@ -1500,8 +979,8 @@ function EditReport() {
                 </button>
                 
                 <button
-                  onClick={handleRegenerate}
-                  disabled={regenerating || saving || fixingGrammar || reviewing}
+                  onClick={() => setShowRegenerateModal(true)}
+                  disabled={regenerating || saving || fixingGrammar}
                   className="px-6 py-2.5 bg-blue-50 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-blue-200"
                   title="Generate a completely new report from scratch"
                 >
@@ -1511,7 +990,7 @@ function EditReport() {
 
                 <button
                   onClick={handleAddContact}
-                  disabled={addingContact || saving || reviewing}
+                  disabled={addingContact || saving}
                   className="px-6 py-2.5 bg-teal-50 text-teal-700 font-medium rounded-xl hover:bg-teal-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-teal-200"
                   title="Add your contact information to the report"
                 >
@@ -1700,6 +1179,156 @@ function EditReport() {
           )}
         </div>
       </div>
+
+      {/* Regenerate Report Modal */}
+      {showRegenerateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setShowRegenerateModal(false)}>
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-sage-800 mb-2 flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-blue-600" />
+                Regenerate Report
+              </h3>
+              <p className="text-sm text-gray-600">
+                This will generate a completely new report from scratch. Your current edits will be replaced.
+              </p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-purple-700 mb-2">
+                AI Writing Instructions (Optional)
+              </label>
+              <textarea
+                value={regenerateInstructions}
+                onChange={(e) => setRegenerateInstructions(e.target.value)}
+                className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                rows={3}
+                placeholder="e.g., 'Make it more concise', 'Focus on her problem-solving skills'"
+              />
+              <p className="text-xs text-purple-500 mt-1">
+                Tell the AI how you'd like the new report to be written.
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRegenerateModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRegenerate(regenerateInstructions)}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Regenerate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ask AI Sidebar */}
+      {showAskAI && (
+        <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl border-l-2 border-purple-200 z-50 flex flex-col">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5" />
+              <h3 className="font-semibold">Ask AI</h3>
+            </div>
+            <button
+              onClick={() => setShowAskAI(false)}
+              className="text-white hover:text-purple-200 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Selected Text Display */}
+          <div className="p-4 bg-purple-50 border-b border-purple-200">
+            <p className="text-xs font-semibold text-purple-700 mb-1">Selected Text:</p>
+            <p className="text-sm text-gray-800 italic">"{selectedTextForAI}"</p>
+          </div>
+
+          {/* Chat History */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {aiChatHistory.length === 0 && !loadingAIAnswer && (
+              <div className="text-center text-gray-500 text-sm mt-8">
+                <Sparkles className="w-12 h-12 mx-auto mb-3 text-purple-300" />
+                <p>Ask me anything about the selected text!</p>
+                <p className="text-xs mt-2">e.g., "Does this sound professional?" or "How can I improve this?"</p>
+              </div>
+            )}
+            
+            {aiChatHistory.map((chat, idx) => (
+              <div key={idx} className="space-y-2">
+                {/* User Question */}
+                <div className="flex justify-end">
+                  <div className="bg-purple-600 text-white rounded-lg px-4 py-2 max-w-[85%]">
+                    <p className="text-sm">{chat.question}</p>
+                  </div>
+                </div>
+                
+                {/* AI Answer */}
+                {chat.answer && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 text-gray-800 rounded-lg px-4 py-2 max-w-[85%]">
+                      <p className="text-sm whitespace-pre-wrap">{chat.answer}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            
+            {loadingAIAnswer && aiChatHistory[aiChatHistory.length - 1]?.answer === null && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 text-gray-600 rounded-lg px-4 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
+                    <p className="text-sm">Thinking...</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div ref={aiChatEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={currentAIQuestion}
+                onChange={(e) => setCurrentAIQuestion(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAskAI()}
+                placeholder="Ask a question..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+              />
+              <button
+                onClick={handleAskAI}
+                disabled={!currentAIQuestion.trim() || loadingAIAnswer}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+            {aiChatHistory.length > 0 && (
+              <button
+                onClick={() => setAiChatHistory([])}
+                className="mt-2 text-xs text-gray-600 hover:text-gray-800"
+              >
+                Clear Chat
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

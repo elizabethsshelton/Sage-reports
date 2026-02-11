@@ -25,77 +25,12 @@ class AIService:
             try:
                 from anthropic import Anthropic
                 self.client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
-                self.model = 'claude-3-5-sonnet-20241022'  # Using latest model
+                self.model = 'claude-sonnet-4-20250514'  # Using latest working model
             except Exception as e:
                 print(f"Error initializing Anthropic: {e}")
                 self.client = None
         else:
             self.client = None
-    
-    def organize_notes(
-        self,
-        notes: str,
-        topics_covered: str = '',
-        activities: str = ''
-    ) -> str:
-        """
-        Organize session notes to optimize report flow and structure.
-        Maintains the tutor's intended chronological/flow order but cleans up duplicates
-        and moves misplaced items to their proper place in the sequence.
-        """
-        if not notes or not notes.strip():
-            return notes
-        
-        # Combine all input for context
-        combined_input = f"""Topics Covered: {topics_covered}\n\nActivities: {activities}\n\nNotes: {notes}"""
-        
-        system_prompt = """You are helping a tutor organize their session notes to optimize the flow and structure of the final report. The tutor usually writes notes in the general order they want the report to flow (chronologically or by sequence of events). Your job is to:
-
-1. **Maintain the tutor's intended flow** - Keep the general order and sequence they wrote, as this reflects how they want the report to read
-2. **Remove duplicates** - If the same point appears multiple times, keep it only once in the most appropriate place
-3. **Move misplaced items** - If something mentioned later should have been mentioned earlier (based on chronology or logical flow), move it to the right place in the sequence
-4. **Merge related fragments** - If the same topic is mentioned in multiple places, combine those fragments into one coherent point at the appropriate location
-5. **Preserve all information** - Don't lose any details, just clean up the flow
-6. **Maintain chronological order** - Ensure the sequence makes sense chronologically and flows smoothly
-7. **Keep the tutor's wording** - Preserve their exact phrasing and voice, just optimize the order
-
-The goal is to create notes that will result in a smooth, well-flowing report narrative - not to categorize content, but to ensure the report reads naturally from start to finish. Output the cleaned-up notes in the optimized order. Do NOT write a report - just reorganize the notes for better report flow."""
-        
-        user_prompt = f"""Please optimize these session notes for smooth report flow. Maintain the tutor's intended order but clean up duplicates and move any misplaced items to their proper place in the sequence:\n\n{combined_input}"""
-        
-        try:
-            if self.provider == 'openai':
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=0.3,  # Lower temperature for more consistent organization
-                    max_tokens=2000
-                )
-                organized = response.choices[0].message.content.strip()
-            
-            elif self.provider == 'anthropic':
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=2000,
-                    temperature=0.3,
-                    system=system_prompt,
-                    messages=[
-                        {"role": "user", "content": user_prompt}
-                    ]
-                )
-                organized = response.content[0].text.strip()
-            else:
-                return notes  # Fallback to original if no provider
-            
-            return organized
-        
-        except Exception as e:
-            print(f"Error organizing notes: {e}")
-            # If organization fails, return original notes
-            return notes
     
     def generate_report(
         self,
@@ -111,7 +46,8 @@ The goal is to create notes that will result in a smooth, well-flowing report na
         tutor_name: str = None,
         include_contact: bool = False,
         tutor_phone: str = None,
-        tutor_email: str = None
+        tutor_email: str = None,
+        ai_instructions: str = ''
     ) -> str:
         """
         Generate a tutoring session report
@@ -140,6 +76,10 @@ The goal is to create notes that will result in a smooth, well-flowing report na
             sample_reports, previous_reports, minimal_editing, parent_name
         )
         
+        # Add AI instructions if provided
+        if ai_instructions:
+            context += f"\n\n**ADDITIONAL INSTRUCTIONS FOR THIS REPORT:**\n{ai_instructions}\n\nIMPORTANT: Follow these additional instructions carefully."
+        
         # Generate the report
         report_text = ""
         try:
@@ -159,7 +99,7 @@ The goal is to create notes that will result in a smooth, well-flowing report na
                 response = self.client.messages.create(
                     model=self.model,
                     max_tokens=1500,
-                    temperature=0.8,  # Slightly higher for more natural variation
+                    temperature=0.7,
                     system=self._get_system_prompt(),
                     messages=[
                         {"role": "user", "content": context}
@@ -184,19 +124,33 @@ The goal is to create notes that will result in a smooth, well-flowing report na
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for report generation"""
-        return """You are a tutor writing to a parent after a session. This isn't a formal report - it's a personal message, like you're texting or emailing a friend about their child. Write with a casual, conversational, caring tone.
+        return """Your job is to write a tutoring session report that sounds EXACTLY like the example reports provided.
 
-You genuinely care about this student. You're not just going through the motions - you're invested in their success, you notice their progress, and you want the parent to know how they're doing. Your writing shows that you care about this kid as a person, not just as a student. You celebrate their wins, you acknowledge when they're trying hard, and you believe in them.
+CRITICAL - Your #1 priority is to MIMIC THE STYLE of the sample reports:
+- Study how the writer structures their paragraphs
+- Notice their sentence length and rhythm
+- Copy their level of detail (not too much, not too little)
+- Match their casual, genuine, direct, conversational tone
+- Use similar transitions between ideas
+- Mirror how they weave together what happened, how the student did, and what's next
 
-When you write, you sound like a real person talking to a friend. You use simple, everyday words - you say "worked on" not "delved into," "practiced" not "engaged with," "went over" not "explored." You write exactly the way you'd talk if you were telling the parent what happened in person - casual, warm, and genuine.
+VOICE GUIDELINES:
+- Casual and genuine - like a friendly professional conversation
+- Direct - get to the point without excessive formality
+- Conversational - as if speaking to the parent face-to-face
+- Natural paragraphs that flow - NO bullet points, NO section headers
 
-You write in flowing paragraphs, like you're having a conversation. No bullet points, no section headers, no formal structure. You just tell the parent what happened, how the student did, and what you noticed - naturally, the way it actually happened. It should feel like you're catching up with them, not filling out paperwork.
+PUNCTUATION RULES:
+- Use regular hyphens (-) NOT em dashes (—)
+- Keep punctuation simple and natural
 
-The example reports you'll see show you exactly how this tutor writes. Study them carefully - notice how casual and conversational they are, how caring and warm the tone is, the simple words they use, how they start, how they describe things, how they talk about the student, how they end. Write exactly like that. Match their casual voice, their caring style, their way of expressing genuine interest in the student.
+STRUCTURE:
+- Start with the greeting, then add a warm opening sentence - vary the wording but keep the idea of being glad to see them (e.g., "It was great to see [Student] again this week!" or "Always a pleasure working with [Student]!" or "Good to see [Student] today!")
+- 2-5 body paragraphs covering what was done, how the student performed, areas to work on
+- Closing: If relevant, add 1-2 context sentences first (e.g., "Wishing her luck on her test!" or "[Student] is working hard and showing great progress."). Then ALWAYS end with a forward-looking sentence - vary the wording but keep the idea (e.g., "Looking forward to seeing [Student] again next week!" or "See you next session!" or "Can't wait to work with [Student] again!")
+- NO sign-off like "Best," or "Sincerely," (system adds that automatically)
 
-One important detail: In the opening and closing sentences, use only the student's first name, not their full name.
-
-Write as if you ARE this tutor, writing to the parent after today's session. Let the writing flow naturally from what actually happened. Don't sound formal or professional - sound casual, conversational, and genuinely caring, like you're telling a friend about their child."""
+The sample reports show you exactly how this writer sounds. Copy that voice and structure."""
     
     def _build_context(
         self,
@@ -212,7 +166,7 @@ Write as if you ARE this tutor, writing to the parent after today's session. Let
     ) -> str:
         """Build the context message for the AI"""
         
-        # Extract first name from student_name for use in opening/closing
+        # Extract first name from student name (before any space)
         student_first_name = student_name.split()[0] if student_name else student_name
         
         # Determine the greeting
@@ -238,7 +192,7 @@ DO NOT:
 - Add content they didn't mention
 - Change the tone significantly
 
-**Student:** {student_name}
+**Student:** {student_first_name} (ALWAYS use ONLY the first name throughout the report)
 **Subject:** {subject}
 """
             if greeting:
@@ -254,11 +208,10 @@ What We Did:
 {activities}
 """
             if notes:
-                # Organize notes before using them
-                organized_notes = self.organize_notes(notes, topics_covered, activities)
-                context += f"\nAdditional Notes:\n{organized_notes}\n"
+                context += f"\n**TUTOR'S ADDITIONAL NOTES (USE ALL OF THIS):**\n{notes}\n"
+                context += "\n🔴 Make sure ALL content from these notes is included in the final report.\n"
             
-            context += "\n**Your Task:** Lightly edit this for grammar and clarity while preserving the user's voice and structure."
+            context += "\n**Your Task:** Lightly edit this for grammar and clarity while preserving the user's voice and structure. Ensure ALL the content from the notes above is incorporated."
             if greeting:
                 context += f" The report MUST begin with \"{greeting}\""
             context += " Convert to flowing paragraph format if needed (no bullet points or section headers unless the user explicitly used them). "
@@ -266,7 +219,9 @@ What We Did:
             return context
         
         # NORMAL MODE - Full AI generation (prioritize user's wording when present)
-        context = f"""Please write a tutoring session report for {student_name}.
+        context = f"""Please write a tutoring session report for {student_first_name}.
+
+**CRITICAL: Always refer to the student as "{student_first_name}" (first name only) throughout the entire report. Never use their full name.**
 """
         
         if greeting:
@@ -274,23 +229,20 @@ What We Did:
         
         context += f"""
 **Session Information:**
-- Student: {student_name}
+- Student: {student_first_name}
 - Subject: {subject}
 - Topics Covered: {topics_covered}
 - Activities and Work Done: {activities}
 """
         
         if notes:
-            # Organize notes before using them
-            organized_notes = self.organize_notes(notes, topics_covered, activities)
-            context += f"- Additional Notes: {organized_notes}\n"
-            # If notes have substantial structure (multiple bullets/sentences), prioritize them
-            if organized_notes.count('•') >= 3 or organized_notes.count('\n') >= 2:
-                context += "\n**IMPORTANT:** The user has provided detailed notes with structure. Use their wording and organization as the primary content, expanding naturally while maintaining their voice.\n"
+            context += f"\n**TUTOR'S NOTES (CRITICAL - USE ALL OF THIS CONTENT):**\n{notes}\n"
+            context += "\n🔴 **CRITICAL INSTRUCTION:** The tutor has provided detailed notes above. You MUST include ALL the information from these notes in the report. Do not skip or summarize any points - every detail matters. Expand on these notes naturally in the report style, but ensure EVERY point is covered.\n"
         
         # Add sample reports for style reference
         if sample_reports and len(sample_reports) > 0:
-            context += f"\n**Here are {len(sample_reports)} example reports written by this tutor. Study them carefully - this is exactly how you write:**\n\n"
+            context += "\n**EXAMPLE REPORTS - This is EXACTLY how you should write:**\n"
+            context += f"Study these {len(sample_reports)} reports carefully. Your report should sound just like these:\n\n"
             # Show more samples with full text to really learn the style
             for i, sample in enumerate(sample_reports, 1):
                 # Show full text for first 8 samples, truncate after that
@@ -302,14 +254,26 @@ What We Did:
         
         # Add previous report context
         if previous_reports and len(previous_reports) > 0:
-            context += f"\n**Context from recent sessions with {student_first_name}:**\n"
+            context += "\n**Previous Session Notes:**\n"
+            context += "Here's what happened in recent sessions with this student:\n"
             for report in previous_reports[:2]:  # Use last 2 reports
                 date = report.get('session_date', 'N/A')
                 topics = report.get('topics_covered', 'N/A')
                 context += f"- {date}: {topics}\n"
         
-        context += f"\n**Now write the report for today's session.**\n\n"
-        context += f"Write it exactly like the tutor in those examples would write it - casual, conversational, and genuinely caring. Use only {student_first_name}'s first name in the opening and closing sentences. Write like you're talking to a friend about their child - warm, natural, and showing that you really care about {student_first_name}. Stop after your closing sentence - no sign-off (the system adds that automatically)."
+        context += "\n**Your Task:**\n"
+        context += "Write a session report for this student using the EXACT same style, tone, and structure as the example reports above.\n\n"
+        context += "Key reminders:\n"
+        context += f"- 🔴 MOST IMPORTANT: Include ALL content from the tutor's notes - don't skip anything!\n"
+        context += f"- ALWAYS use only the first name \"{student_first_name}\" - NEVER use the full name\n"
+        context += f"- Start with a warm opening sentence after the greeting - vary the wording each time but keep the idea of being glad to see them (e.g., 'It was great to see {student_first_name} again this week!' or 'Always a pleasure working with {student_first_name}!' or 'Good to see {student_first_name} today!')\n"
+        context += "- Copy the casual, direct, conversational voice from the examples\n"
+        context += "- 2-5 body paragraphs covering what was done and how the student did (include EVERYTHING from the notes)\n"
+        context += f"- Closing: If relevant to the session, add 1-2 context sentences first (e.g., if there's a test: 'Wishing her luck on her test!' or if showing progress: '{student_first_name} is working hard and showing great progress.'). Then ALWAYS end with a forward-looking sentence - vary the wording but keep the idea (e.g., 'Looking forward to seeing {student_first_name} again next week!' or 'See you next session!' or 'Can't wait to work with {student_first_name} again!')\n"
+        context += "- Use the writer's natural phrasing - don't make it more formal or detailed than the examples\n"
+        context += "- NO bullet points, NO section headers - just flowing paragraphs like the examples\n"
+        context += "- Stop after the closing sentence - NO sign-off like 'Best,' (system adds that)\n\n"
+        context += "Think: 'What would the writer of those example reports say about THIS session?'"
         
         return context
     
@@ -441,9 +405,7 @@ Looking forward to our next session!
             
             if is_mid_sentence and partial_sentence:
                 # Generate COMPLETIONS for the partial sentence
-                prompt = f"""You are helping a tutor finish a sentence in a session report for {student_name} ({subject}). 
-
-**CRITICAL:** This tutor writes in a very human, conversational way - like they're talking to a friend about their child. It's warm, genuine, and caring. It does NOT sound formal, professional, or corporate. It sounds like a real person.
+                prompt = f"""You are helping a tutor finish a sentence in a session report for {student_name} ({subject}).
 
 **Current full report context:**
 {report_text[:600]}...
@@ -453,13 +415,12 @@ Looking forward to our next session!
 
 **Task:** Generate 4 DIFFERENT ways to COMPLETE this sentence (not new sentences, but endings for the sentence they started).
 
-Generate 4 sentence completions that:
+Generate 4 sentence COMPLETIONS that:
 - Continue naturally from the partial sentence above
-- Sound VERY human and conversational - use simple, everyday words
-- Show genuine care for the student
+- Match the tutor's writing style
+- Are light, casual, and conversational
 - Each completion should finish the thought in a different way
 - Start directly with the continuation (no repeating the partial sentence)
-- Sound like a real person talking, not a formal report
 
 Example:
 If partial sentence is "She really struggled with"
@@ -468,9 +429,7 @@ Good completions: ["the fraction problems.", "understanding the concept at first
 Generate 4 completions for: "{partial_sentence}" """
             else:
                 # Generate full standalone sentences
-                prompt = f"""You are helping a tutor write a session report for {student_name} ({subject}). 
-
-**CRITICAL:** This tutor writes in a very human, conversational way - like they're talking to a friend about their child. It's warm, genuine, and caring. It does NOT sound formal, professional, or corporate. It sounds like a real person.
+                prompt = f"""You are helping a tutor write a session report for {student_name} ({subject}).
 
 **Current full report context:**
 {report_text[:600]}...
@@ -481,26 +440,23 @@ Generate 4 completions for: "{partial_sentence}" """
 **Cursor position:**
 "{context_before.strip()} [CURSOR] {context_after.strip()}"
 
-Generate 4 sentences that would fit naturally RIGHT AT THE CURSOR position. Write them with a VERY human, conversational tone - like a real person talking. Use simple everyday words. Show genuine care for the student. Sound natural and genuine, not formal or polished."""
+Generate 4 sentences that would fit naturally RIGHT AT THE CURSOR position."""
         else:
-            prompt = f"""You are helping a tutor write a session report for {student_name} ({subject}). 
-
-**CRITICAL:** This tutor writes in a very human, conversational way - like they're talking to a friend about their child. It's warm, genuine, and caring. It does NOT sound formal, professional, or corporate. It sounds like a real person.
+            prompt = f"""You are helping a tutor write a session report for {student_name} ({subject}).
 
 **Current draft:**
 {report_text[:500]}...
 
-Generate 4 sentences that could fit naturally in this report. Write them with a VERY human, conversational tone - like a real person talking. Use simple everyday words. Show genuine care for the student. Sound natural and genuine, not formal or polished."""
+Generate 4 sentences that could fit naturally in this report."""
         
         # Add style examples if previous reports available
         style_context = ""
         if previous_reports and len(previous_reports) > 0:
-            style_context = "\n\n**CRITICAL: Here are example reports from this tutor - study them VERY carefully. This tutor writes in a very human, conversational way. It sounds like a real person talking to a friend, not a formal report. Notice their exact words, sentence structure, and tone. Match it exactly.**\n"
-            for i, report in enumerate(previous_reports[:8], 1):
+            style_context = "\n\n**WRITING STYLE REFERENCE - Study these examples to match the tutor's voice:**\n"
+            for i, report in enumerate(previous_reports[:2], 1):
                 import re
                 clean_report = re.sub(r'\n*Best,\n[^\n]+(?:\n[^\n]+)*$', '', report).strip()
-                style_context += f"\n--- Example {i} ---\n{clean_report[:600]}...\n"
-            style_context += "\n**Write exactly like the tutor in these examples - conversational, human, warm, genuine, caring. Use their exact style and voice.**\n"
+                style_context += f"\n{clean_report[:500]}...\n"
         
         prompt += style_context
         
@@ -528,12 +484,24 @@ Example response format:
 
 **CRITICAL:** Generate 4 SEPARATE, INDIVIDUAL sentences (not a paragraph).
 
-Write exactly like the tutor in those examples - VERY human, conversational, and genuinely caring. Sound like a real person talking to a friend, not writing a formal report. Use simple, everyday words - the kind you'd use in conversation. Show you care about the student. Each sentence should be COMPLETE and INDEPENDENT (can stand alone). Keep each sentence SHORT - aim for 10-20 words each. Use regular hyphens (-) NOT em dashes (—). Sound natural and genuine, not polished or professional.
+**Task:** Generate 4 SHORT, STANDALONE sentences that:
+1. Match the tutor's EXACT writing style (study the examples above)
+2. Flow naturally from what comes immediately before the cursor
+3. Are light, casual, and conversational (not overly formal)
+4. Sound like this specific tutor wrote them, not generic tutor language
+5. Each sentence should be COMPLETE and INDEPENDENT (can stand alone)
+6. Keep each sentence SHORT - aim for 10-20 words each
+7. Use regular hyphens (-) NOT em dashes (—)
 
 **Format requirements:**
 - Each item in the array must be ONE sentence only (ending with . ! or ?)
 - NO multi-sentence paragraphs
 - Each sentence should be insertable on its own
+
+**Style notes:**
+- Notice the tutor's sentence length and rhythm in the examples
+- Match their level of detail and formality
+- Keep it natural and genuine, not overly enthusiastic
 
 **Good examples:**
 ["She asked great questions throughout.", "I'm confident this will click with more practice.", "We took extra time on the tricky concepts.", "She's making steady progress each week."]
@@ -650,7 +618,7 @@ Return ONLY a JSON array of 4 INDIVIDUAL sentences:
         if not self.client:
             return []
         
-        # Extract first name from student_name for use in opening/closing
+        # Extract first name only
         student_first_name = student_name.split()[0] if student_name else student_name
         
         # Extract opening/closing sentences from previous reports for examples
@@ -677,25 +645,22 @@ Return ONLY a JSON array of 4 INDIVIDUAL sentences:
                 if len(paragraphs) > 1:
                     current_context = f"\n\n**Context from current report (what comes before the closing):**\n{paragraphs[-2][:300] if len(paragraphs[-2]) > 0 else paragraphs[-3][:300]}..."
         
-        # Show full example reports for style matching (more examples for better training)
+        # Show full example reports for style matching (2-3 complete reports)
         style_examples = ""
         if previous_reports:
-            style_examples = "\n\n**CRITICAL: FULL EXAMPLE REPORTS - Study these VERY carefully. Notice how this tutor writes - it's conversational, human, warm, and genuine. Match their exact voice and style:**\n"
-            for i, report in enumerate(previous_reports[:8], 1):
+            style_examples = "\n\n**FULL EXAMPLE REPORTS (study the writing style):**\n"
+            for i, report in enumerate(previous_reports[:3], 1):
                 # Remove signatures for cleaner examples
                 import re
                 clean_report = re.sub(r'\n*Best,\n[^\n]+(?:\n[^\n]+)*$', '', report).strip()
                 style_examples += f"\n--- Report {i} ---\n{clean_report[:800]}...\n"
-            style_examples += "\n**Write exactly like the tutor in these examples - conversational, human, warm, genuine, caring. Use their exact style and voice.**\n"
         
         if sentence_type == 'opening':
-            prompt = f"""You are helping a tutor write varied opening sentences for session reports about {student_name}. 
+            prompt = f"""You are helping a tutor write varied opening sentences for session reports about {student_first_name}.
 
-**CRITICAL:** This tutor writes in a very human, conversational way - like they're talking to a friend about their child. It's warm, genuine, and caring. It does NOT sound formal, professional, or corporate. It sounds like a real person.
+**CRITICAL: ALWAYS use only the first name "{student_first_name}" - NEVER use a full name.**
 
-**IMPORTANT:** Use ONLY the student's FIRST NAME ({student_first_name}) in the opening sentences, NOT the full name ({student_name}).
-
-Write exactly like the tutor in those examples - VERY human, conversational, and genuinely caring. Sound like a real person talking to a friend. Use simple, everyday words - the kind you'd use in conversation. Show you care about {student_first_name}.
+Your goal is to match the tutor's EXACT writing style - their tone, rhythm, word choice, and personality.
 
 **Opening sentences from past reports:**
 {examples_text}
@@ -704,22 +669,33 @@ Write exactly like the tutor in those examples - VERY human, conversational, and
 
 **CRITICAL:** Each suggestion must be ONE sentence only (not multiple sentences).
 
-Generate 5 DIFFERENT opening sentences that sound exactly like this tutor wrote them - casual, natural, warm, and caring. Each must be ONE COMPLETE sentence (ending with . ! or ?). Use regular hyphens (-) NOT em dashes (—).
+**Task:** Generate 5 DIFFERENT opening sentences that:
+1. Sound EXACTLY like this tutor wrote them (match their voice, not generic tutor-speak)
+2. Are light, casual, and natural (like this tutor's style)
+3. Vary in wording but maintain the same warm, welcoming feel
+4. Fit naturally with what comes next in the report
+5. Each must be ONE COMPLETE sentence (ending with . ! or ?)
+6. Use the tutor's sentence patterns and rhythm
+7. Use regular hyphens (-) NOT em dashes (—)
+
+**Key style notes:**
+- Study the examples to see how this specific tutor phrases things
+- Notice their sentence length, word choices, and level of formality
+- Don't be overly enthusiastic or formal - keep it genuine and conversational
+- These should feel like natural variations, not templates with names swapped
 
 **Format:** Each array item must be ONE sentence only.
-Good: ["Great to see {student_first_name} today!", "It was wonderful working with {student_first_name} this week."]
-Bad: ["Great to see {student_first_name} today! We had a productive session."] ← Two sentences!
+Good: ["Great to see Sarah today!", "It was wonderful working with Sarah this week."]
+Bad: ["Great to see Sarah today! We had a productive session."] ← Two sentences!
 
 Return ONLY a JSON array of 5 SINGLE opening sentences:
 ["sentence 1", "sentence 2", "sentence 3", "sentence 4", "sentence 5"]"""
         else:  # closing
-            prompt = f"""You are helping a tutor write varied closing sentences for session reports about {student_name}. 
+            prompt = f"""You are helping a tutor write varied closing sentences for session reports about {student_first_name}.
 
-**CRITICAL:** This tutor writes in a very human, conversational way - like they're talking to a friend about their child. It's warm, genuine, and caring. It does NOT sound formal, professional, or corporate. It sounds like a real person.
+**CRITICAL: ALWAYS use only the first name "{student_first_name}" - NEVER use a full name.**
 
-**IMPORTANT:** Use ONLY the student's FIRST NAME ({student_first_name}) in the closing sentences, NOT the full name ({student_name}).
-
-Write exactly like the tutor in those examples - VERY human, conversational, and genuinely caring. Sound like a real person talking to a friend. Use simple, everyday words - the kind you'd use in conversation. Show you care about {student_first_name}.
+Your goal is to match the tutor's EXACT writing style - their tone, rhythm, word choice, and personality.
 
 **Closing sentences from past reports:**
 {examples_text}
@@ -728,10 +704,24 @@ Write exactly like the tutor in those examples - VERY human, conversational, and
 
 **CRITICAL:** Each suggestion must be ONE sentence only (not multiple sentences).
 
-Generate 5 DIFFERENT closing sentences that sound exactly like this tutor wrote them - casual, natural, positive, and forward-looking without being overly enthusiastic. Flow naturally from what comes before in the report. Each must be ONE COMPLETE sentence (ending with . ! or ?). Use regular hyphens (-) NOT em dashes (—).
+**Task:** Generate 5 DIFFERENT closing sentences that:
+1. Sound EXACTLY like this tutor wrote them (match their voice, not generic tutor-speak)
+2. Are light, casual, and natural (like this tutor's style)
+3. Flow naturally from what comes before in the report
+4. Are positive and forward-looking without being overly enthusiastic
+5. Each must be ONE COMPLETE sentence (ending with . ! or ?)
+6. Use the tutor's sentence patterns and rhythm
+7. Use regular hyphens (-) NOT em dashes (—)
+
+**Key style notes:**
+- Study the examples to see how this specific tutor ends their reports
+- Notice their sentence length, word choices, and level of formality
+- Don't be overly enthusiastic or formal - keep it genuine and conversational
+- These should feel like natural variations, not templates with names swapped
+- Consider the context: if the report mentions an upcoming test or challenge, acknowledge it naturally
 
 **Format:** Each array item must be ONE sentence only.
-Good: ["Looking forward to next week!", "Can't wait to continue this work with {student_first_name}."]
+Good: ["Looking forward to next week!", "Can't wait to continue this work with Sarah."]
 Bad: ["Looking forward to next week! Keep up the great work."] ← Two sentences!
 
 Return ONLY a JSON array of 5 SINGLE closing sentences:
@@ -749,7 +739,7 @@ Return ONLY a JSON array of 5 SINGLE closing sentences:
             
             elif self.provider == 'anthropic':
                 response = self.client.messages.create(
-                    model='claude-3-5-sonnet-20241022',
+                    model=self.model,
                     max_tokens=500,
                     temperature=0.7,
                     messages=[{"role": "user", "content": prompt}]
@@ -810,12 +800,11 @@ Return ONLY a JSON array of 5 SINGLE closing sentences:
         # Build style context from previous reports
         style_context = ""
         if previous_reports and len(previous_reports) > 0:
-            style_context = "\n\n**CRITICAL: WRITING STYLE REFERENCE - Study these examples VERY carefully. Notice how this tutor writes - it's conversational, human, warm, and genuine. Match their exact voice and style:**\n"
-            for i, report in enumerate(previous_reports[:8], 1):
+            style_context = "\n\n**WRITING STYLE REFERENCE (study these examples to match the tutor's voice):**\n"
+            for i, report in enumerate(previous_reports[:2], 1):
                 import re
                 clean_report = re.sub(r'\n*Best,\n[^\n]+(?:\n[^\n]+)*$', '', report).strip()
                 style_context += f"\n--- Example {i} ---\n{clean_report[:600]}...\n"
-            style_context += "\n**Write exactly like the tutor in these examples - conversational, human, warm, genuine, caring. Use their exact style and voice.**\n"
         
         # Get context before and after the paragraph
         if paragraph in full_report:
@@ -826,9 +815,7 @@ Return ONLY a JSON array of 5 SINGLE closing sentences:
             context_before = ""
             context_after = ""
         
-        prompt = f"""You are helping a tutor rewrite a paragraph from a session report about {student_name}. 
-
-**CRITICAL:** This tutor writes in a very human, conversational way - like they're talking to a friend about their child. It's warm, genuine, and caring. It does NOT sound formal, professional, or corporate. It sounds like a real person.
+        prompt = f"""You are helping a tutor rewrite a paragraph from a session report about {student_name}.
 
 **Your goal:** Completely REWRITE this paragraph in the tutor's style while keeping the same information and key points.
 
@@ -842,7 +829,28 @@ Return ONLY a JSON array of 5 SINGLE closing sentences:
 {context_after if context_after else "(End of report)"}
 {style_context}
 
-Write it exactly like the tutor in those examples - VERY human, conversational, and genuinely caring. Sound like a real person talking to a friend, not writing a formal report. Use simple, everyday words - the kind you'd use in conversation. Show genuine care for the student. Keep ALL the same information and key points from the original, but use completely DIFFERENT wording and sentence structure. Make it flow naturally with what comes before and after. Use regular hyphens (-) NOT em dashes (—). Sound natural and genuine, not polished or professional.
+**CRITICAL INSTRUCTIONS:**
+1. Keep ALL the same information and key points from the original
+2. Write it in the tutor's EXACT style (study the examples above)
+3. Use completely DIFFERENT wording and sentence structure than the original
+4. Make it flow naturally with what comes before and after
+5. Match the tutor's:
+   - Sentence length and rhythm
+   - Level of detail and formality
+   - Word choices and phrasing style
+   - Casual, conversational tone
+6. Use regular hyphens (-) NOT em dashes (—)
+7. Return ONLY the rewritten paragraph, no quotes or explanation
+
+**What to keep:**
+- All facts, activities, topics, and observations
+- The overall message and tone (positive/constructive/etc)
+- The purpose of this paragraph in the report
+
+**What to change:**
+- Sentence structure and wording
+- How ideas are ordered or connected
+- The way concepts are expressed
 
 Return ONLY the rewritten paragraph, nothing else."""
 
@@ -869,34 +877,28 @@ Return ONLY the rewritten paragraph, nothing else."""
             print(f"Error redoing paragraph: {e}")
             return paragraph
     
-    def polish_text(self, text_to_polish: str, full_context: str = "", previous_reports: List[str] = None) -> str:
+    def polish_text(self, text_to_polish: str, full_context: str = "") -> str:
         """Improve a selected portion of text while keeping the same meaning"""
         
         if not self.client:
             return text_to_polish
         
-        prompt = f"""You are helping polish a portion of a tutoring report. This tutor writes with a casual, conversational, caring tone - like they're talking to a friend about their child.
+        prompt = f"""You are helping polish a portion of a tutoring report.
 
-This is CRITICAL: The tutor's writing is very human and conversational. It sounds like a real person talking, not a formal report. It's warm, genuine, and caring. You must match this exact tone.
-
-Make it sound better - clearer, more natural, more genuine, MORE HUMAN. Keep the SAME meaning and main ideas. Keep the casual, conversational, caring tone. Use simple, everyday words - the kind of words you'd use when talking to a friend. Fix any grammar or awkward phrasing, but don't make it more formal or wordy. Don't make it sound professional or polished in a corporate way - make it sound like a real person who genuinely cares.
+RULES:
+- Make it sound better (clearer, more natural, more professional)
+- Keep the SAME meaning and main ideas
+- Keep the casual, conversational tone
+- Fix any grammar or awkward phrasing
+- Don't make it more formal or wordy
 
 Text to polish: {text_to_polish}
 """
         
-        # Add style examples from previous reports
-        if previous_reports and len(previous_reports) > 0:
-            prompt += "\n\n**CRITICAL: Here are example reports from this tutor - study them carefully. Match their exact voice, tone, and way of expressing things:**\n"
-            for i, report in enumerate(previous_reports[:5], 1):
-                import re
-                clean_report = re.sub(r'\n*Best,\n[^\n]+(?:\n[^\n]+)*$', '', report).strip()
-                prompt += f"\n--- Example {i} ---\n{clean_report[:600]}...\n"
-            prompt += "\n**Notice how this tutor writes - it's conversational, human, warm, and genuine. Write exactly like that. Match their voice.**\n"
-        
         if full_context:
             prompt += f"\nFull report context:\n{full_context[:500]}...\n\n"
         
-        prompt += "Return ONLY the polished version WITHOUT any quotation marks around it. Just the text itself, nothing else. Make it sound more human and conversational, not more formal."
+        prompt += "Return ONLY the polished version WITHOUT any quotation marks around it. Just the text itself, nothing else."
 
         try:
             if self.provider == 'openai':
@@ -969,349 +971,6 @@ Return the corrected version with ONLY grammar/spelling/punctuation fixes applie
             print(f"Error fixing grammar: {e}")
             return report_text  # Return unchanged on error
     
-    def suggest_synonyms(self, word: str, context: str = "", previous_reports: List[str] = None) -> List[str]:
-        """Suggest conversational synonyms for a word that match the tutor's style"""
-        
-        if not self.client or not word:
-            return []
-        
-        # Clean the word - remove punctuation, lowercase
-        import re
-        clean_word = re.sub(r'[^\w\s]', '', word).lower().strip()
-        
-        if not clean_word or len(clean_word) < 2:
-            return []
-        
-        prompt = f"""You are helping a tutor find a better word in a session report. This tutor writes in a very human, conversational way - like they're talking to a friend about their child.
-
-**CRITICAL:** The tutor uses simple, everyday words. They do NOT use formal, academic, or corporate language. They sound like a real person talking.
-
-**Word to find synonyms for:** "{clean_word}"
-
-**Context (surrounding text):**
-{context[:300] if context else "(No context provided)"}
-"""
-        
-        # Add style examples from previous reports
-        if previous_reports and len(previous_reports) > 0:
-            prompt += "\n\n**Here are example reports from this tutor - notice the simple, conversational words they use:**\n"
-            for i, report in enumerate(previous_reports[:5], 1):
-                import re
-                clean_report = re.sub(r'\n*Best,\n[^\n]+(?:\n[^\n]+)*$', '', report).strip()
-                prompt += f"\n--- Example {i} ---\n{clean_report[:400]}...\n"
-            prompt += "\n**Suggest synonyms that match this tutor's conversational, human style - simple, everyday words.**\n"
-        
-        prompt += f"""
-
-**Task:** Generate 5-8 simple, conversational synonyms for "{clean_word}" that:
-- Are simple, everyday words (not formal or academic)
-- Sound natural and human (like a real person talking)
-- Fit the conversational tone of this tutor
-- Would work well in the context provided
-- Are appropriate for a tutoring report to a parent
-
-**IMPORTANT:** 
-- Prefer simple, common words over fancy or formal ones
-- Think about how a real person would say this when talking to a friend
-- Avoid words that sound too professional, academic, or corporate
-- Make sure the synonyms actually work in the context
-
-**Format:** Return ONLY a JSON array of synonyms:
-["synonym1", "synonym2", "synonym3", "synonym4", "synonym5"]
-
-Example for "struggled":
-["had trouble with", "found it hard to", "had difficulty with", "was having a tough time with", "was finding challenging"]
-
-Example for "excellent":
-["great", "really good", "awesome", "fantastic", "wonderful"]
-
-Return ONLY the JSON array, nothing else."""
-        
-        try:
-            if self.provider == 'openai':
-                response = self.client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=200
-                )
-                result = response.choices[0].message.content.strip()
-            elif self.provider == 'anthropic':
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=200,
-                    temperature=0.7,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = response.content[0].text.strip()
-            else:
-                return []
-            
-            # Parse JSON response
-            import json
-            result = result.strip()
-            
-            if result.startswith('```'):
-                result = re.sub(r'```(?:json)?\s*|\s*```', '', result).strip()
-            
-            synonyms = json.loads(result)
-            
-            # Validate it's a list of strings
-            if isinstance(synonyms, list) and len(synonyms) > 0:
-                # Filter out the original word and return unique synonyms
-                filtered = [s for s in synonyms if s.lower() != clean_word]
-                return list(dict.fromkeys(filtered))[:8]  # Remove duplicates, max 8
-            else:
-                return []
-        
-        except Exception as e:
-            print(f"Error generating synonyms: {type(e).__name__}: {e}")
-            return []
-    
-    def review_report_phrases(self, report_text: str, previous_reports: List[str] = None) -> List[dict]:
-        """Review entire report and find phrases that need improvement with specific suggestions"""
-        
-        if not self.client or not report_text:
-            return []
-        
-        prompt = f"""You are reviewing a tutoring session report that will be sent to a parent. This tutor writes in a very human, conversational way - like they're talking to a friend about their child.
-
-**CRITICAL:** The tutor uses simple, everyday words. They do NOT use formal, academic, or corporate language. They sound like a real person talking.
-
-**Your task:** Review the ENTIRE report and identify specific phrases, sentences, or words that have problems. For each problem, provide:
-1. The exact text that needs changing (with surrounding context)
-2. What's wrong with it (wordiness, too formal, too informal, doesn't make sense, inappropriate for parent, etc.)
-3. 2-3 better alternatives that match the tutor's conversational, human style
-
-**Types of problems to look for:**
-- Too formal/wordy: "delved into", "engaged with", "explored", "utilized" → should be "worked on", "practiced", "used"
-- Too informal/inappropriate: slang, overly casual language that's not appropriate for a parent
-- Doesn't make sense: confusing phrasing, unclear meaning
-- Wordiness: unnecessarily long phrases that could be simpler
-- Tone mismatch: anything that doesn't sound like a real person talking to a friend
-- Inappropriate for parent: anything that might confuse or concern a parent
-
-**The report to review:**
-{report_text}
-"""
-        
-        # Add style examples from previous reports
-        if previous_reports and len(previous_reports) > 0:
-            prompt += "\n\n**Here are example reports from this tutor - notice their simple, conversational style:**\n"
-            for i, report in enumerate(previous_reports[:5], 1):
-                import re
-                clean_report = re.sub(r'\n*Best,\n[^\n]+(?:\n[^\n]+)*$', '', report).strip()
-                prompt += f"\n--- Example {i} ---\n{clean_report[:600]}...\n"
-            prompt += "\n**Match this tutor's conversational, human style when suggesting improvements.**\n"
-        
-        prompt += """
-
-**CRITICAL INSTRUCTIONS:**
-1. Find ALL problems in the report - be thorough
-2. For each problem, identify the EXACT text that needs changing (quote it exactly)
-3. Explain what's wrong (one sentence)
-4. Provide 2-3 better alternatives that are simple, conversational, and human
-5. Only flag things that genuinely need improvement - don't be overly picky
-
-**Format:** Return a JSON array. Each item should have:
-- "original": the exact text that needs changing (include enough context to find it uniquely)
-- "issue": what's wrong (e.g., "too formal", "wordy", "doesn't make sense", "too informal")
-- "suggestions": array of 2-3 better alternatives
-- "start_index": character position where the problem text starts (approximate is fine)
-- "end_index": character position where it ends
-
-**Example response:**
-[
-  {
-    "original": "We delved into the mathematical concepts",
-    "issue": "too formal - 'delved into' sounds academic",
-    "suggestions": ["worked on", "went over", "practiced"],
-    "start_index": 45,
-    "end_index": 78
-  },
-  {
-    "original": "The student was struggling big time",
-    "issue": "too informal - 'big time' is too casual for a parent",
-    "suggestions": ["was really struggling", "was having a hard time", "was finding it difficult"],
-    "start_index": 120,
-    "end_index": 155
-  }
-]
-
-Return ONLY the JSON array, nothing else. If there are no problems, return an empty array [].
-
-**Important:** Be thorough but fair. Only flag genuine issues. Match the tutor's conversational style in your suggestions."""
-        
-        try:
-            if self.provider == 'openai':
-                response = self.client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.5,  # Lower temp for more consistent analysis
-                    max_tokens=2000
-                )
-                result = response.choices[0].message.content.strip()
-            elif self.provider == 'anthropic':
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=2000,
-                    temperature=0.5,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = response.content[0].text.strip()
-            else:
-                return []
-            
-            # Parse JSON response
-            import json
-            import re
-            
-            result = result.strip()
-            
-            if result.startswith('```'):
-                result = re.sub(r'```(?:json)?\s*|\s*```', '', result).strip()
-            
-            # Try to extract JSON if wrapped in text
-            json_match = re.search(r'\[.*\]', result, re.DOTALL)
-            if json_match:
-                result = json_match.group(0)
-            
-            suggestions = json.loads(result)
-            
-            # Validate and refine suggestions
-            if isinstance(suggestions, list):
-                validated = []
-                used_positions = []  # Track used positions to avoid duplicates
-                
-                for sug in suggestions:
-                    if isinstance(sug, dict) and 'original' in sug and 'suggestions' in sug:
-                        # Try to find the exact position in the text
-                        original_text = sug.get('original', '').strip()
-                        if original_text:
-                            # First, try to use provided indices if they seem valid
-                            provided_start = sug.get('start_index')
-                            provided_end = sug.get('end_index')
-                            
-                            if (provided_start is not None and provided_end is not None and 
-                                provided_start >= 0 and provided_end > provided_start and 
-                                provided_end <= len(report_text)):
-                                # Verify the text at these indices matches
-                                text_at_indices = report_text[provided_start:provided_end].strip()
-                                # Allow some flexibility - check if the original text is contained in the text at indices
-                                if original_text.lower() in text_at_indices.lower() or text_at_indices.lower() in original_text.lower():
-                                    # Check if this position overlaps with already used positions
-                                    overlaps = False
-                                    for used_start, used_end in used_positions:
-                                        if not (provided_end <= used_start or provided_start >= used_end):
-                                            overlaps = True
-                                            break
-                                    
-                                    if not overlaps:
-                                        sug['start_index'] = provided_start
-                                        sug['end_index'] = provided_end
-                                        used_positions.append((provided_start, provided_end))
-                                    else:
-                                        # Position overlaps, try to find a different occurrence
-                                        import re
-                                        pattern = re.escape(original_text)
-                                        matches = list(re.finditer(pattern, report_text, re.IGNORECASE))
-                                        found = False
-                                        for match in matches:
-                                            # Check if this match doesn't overlap with used positions
-                                            overlaps = False
-                                            for used_start, used_end in used_positions:
-                                                if not (match.end() <= used_start or match.start() >= used_end):
-                                                    overlaps = True
-                                                    break
-                                            if not overlaps:
-                                                sug['start_index'] = match.start()
-                                                sug['end_index'] = match.end()
-                                                used_positions.append((match.start(), match.end()))
-                                                found = True
-                                                break
-                                        if not found:
-                                            continue
-                                else:
-                                    # Indices don't match, try to find the text
-                                    import re
-                                    pattern = re.escape(original_text)
-                                    matches = list(re.finditer(pattern, report_text, re.IGNORECASE))
-                                    found = False
-                                    for match in matches:
-                                        # Check if this match doesn't overlap with used positions
-                                        overlaps = False
-                                        for used_start, used_end in used_positions:
-                                            if not (match.end() <= used_start or match.start() >= used_end):
-                                                overlaps = True
-                                                break
-                                        if not overlaps:
-                                            sug['start_index'] = match.start()
-                                            sug['end_index'] = match.end()
-                                            used_positions.append((match.start(), match.end()))
-                                            found = True
-                                            break
-                                    if not found:
-                                        continue
-                            else:
-                                # No valid provided indices, search for the text
-                                import re
-                                pattern = re.escape(original_text)
-                                matches = list(re.finditer(pattern, report_text, re.IGNORECASE))
-                                found = False
-                                for match in matches:
-                                    # Check if this match doesn't overlap with used positions
-                                    overlaps = False
-                                    for used_start, used_end in used_positions:
-                                        if not (match.end() <= used_start or match.start() >= used_end):
-                                            overlaps = True
-                                            break
-                                    if not overlaps:
-                                        sug['start_index'] = match.start()
-                                        sug['end_index'] = match.end()
-                                        used_positions.append((match.start(), match.end()))
-                                        found = True
-                                        break
-                                if not found:
-                                    continue
-                        elif 'start_index' in sug and 'end_index' in sug:
-                            # No original text but has indices - validate them
-                            if (sug['start_index'] >= 0 and sug['end_index'] > sug['start_index'] and 
-                                sug['end_index'] <= len(report_text)):
-                                # Check for overlaps
-                                overlaps = False
-                                for used_start, used_end in used_positions:
-                                    if not (sug['end_index'] <= used_start or sug['start_index'] >= used_end):
-                                        overlaps = True
-                                        break
-                                if overlaps:
-                                    continue
-                                used_positions.append((sug['start_index'], sug['end_index']))
-                            else:
-                                continue
-                        else:
-                            # No text and no indices - skip
-                            continue
-                        
-                        validated.append({
-                            'original': sug.get('original', ''),
-                            'issue': sug.get('issue', 'needs improvement'),
-                            'suggestions': sug.get('suggestions', []),
-                            'start_index': sug.get('start_index', 0),
-                            'end_index': sug.get('end_index', 0)
-                        })
-                
-                # Sort by start_index to ensure proper ordering
-                validated.sort(key=lambda x: (x['start_index'], x['end_index']))
-                return validated
-            
-            return []
-        
-        except Exception as e:
-            print(f"Error reviewing report: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
-            return []
-    
     def suggest_improvements(self, report_text: str) -> List[str]:
         """Suggest improvements for a report"""
         
@@ -1331,6 +990,202 @@ Return ONLY the JSON array, nothing else. If there are no problems, return an em
             suggestions.append("Highlight specific strengths or areas of progress")
         
         return suggestions
+    
+    def ask_about_text(
+        self,
+        selected_text: str,
+        question: str,
+        full_report: str,
+        student_name: str,
+        conversation_history: List[Dict] = None
+    ) -> str:
+        """Answer questions about selected text from a report"""
+        if not self.client:
+            return "AI service not available"
+        
+        # Build conversation context
+        system_prompt = f"""You are a helpful AI assistant. You are chatting with a tutor who is writing a report for a parent about their tutoring session with {student_name}.
+
+The tutor has selected a portion of their report and wants to ask you about it. Be helpful, supportive, and provide clear feedback or suggestions.
+
+Your goal is to have a natural, helpful conversation with the tutor about their writing. Be supportive and provide clear, actionable advice or insights based on their questions."""
+        
+        user_prompt = f"""**Selected text from report:**
+"{selected_text}"
+
+**Full report context:**
+{full_report[:500]}...
+
+**Tutor's question:**
+{question}"""
+        
+        try:
+            if self.provider == 'openai':
+                messages = [{"role": "system", "content": system_prompt}]
+                
+                # Add conversation history
+                if conversation_history:
+                    for chat_item in conversation_history:
+                        messages.append({"role": "user", "content": chat_item['question']})
+                        messages.append({"role": "assistant", "content": chat_item['answer']})
+                
+                messages.append({"role": "user", "content": user_prompt})
+                
+                response = self.client.chat.completions.create(
+                    model='gpt-4o-mini',
+                    messages=messages,
+                    temperature=0.8,
+                    max_tokens=500
+                )
+                return response.choices[0].message.content.strip()
+            
+            elif self.provider == 'anthropic':
+                messages = []
+                
+                # Add conversation history
+                if conversation_history:
+                    for chat_item in conversation_history:
+                        messages.append({"role": "user", "content": chat_item['question']})
+                        messages.append({"role": "assistant", "content": chat_item['answer']})
+                
+                messages.append({"role": "user", "content": user_prompt})
+                
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=500,
+                    temperature=0.8,
+                    system=system_prompt,
+                    messages=messages
+                )
+                return response.content[0].text.strip()
+        
+        except Exception as e:
+            print(f"Error in ask_about_text: {e}")
+            return "Sorry, I encountered an error. Please try again."
+    
+    def get_synonyms(self, word: str, context: str) -> List[str]:
+        """Get contextual synonyms for a word"""
+        if not self.client:
+            return []
+        
+        prompt = f"""Provide 5-7 contextual synonyms or alternative phrasings for the word "{word}" as used in this context:
+
+"{context}"
+
+Consider:
+- The tone should be professional but warm (tutoring report context)
+- Synonyms should fit naturally in the sentence
+- Include both single-word and short phrase alternatives if appropriate
+
+Return ONLY a JSON array of synonyms:
+["synonym1", "synonym2", "synonym3", ...]"""
+        
+        try:
+            if self.provider == 'openai':
+                response = self.client.chat.completions.create(
+                    model='gpt-4o-mini',
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=150
+                )
+                result = response.choices[0].message.content.strip()
+            
+            elif self.provider == 'anthropic':
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=150,
+                    temperature=0.7,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                result = response.content[0].text.strip()
+            
+            # Parse JSON response
+            import json
+            synonyms = json.loads(result)
+            return synonyms if isinstance(synonyms, list) else []
+        
+        except Exception as e:
+            print(f"Error getting synonyms: {e}")
+            return []
+    
+    def review_report(self, report_text: str, student_name: str) -> List[Dict]:
+        """Review a report and provide improvement suggestions"""
+        if not self.client:
+            return []
+        
+        prompt = f"""You are reviewing a tutoring session report about {student_name}. Analyze the report and identify specific phrases or sentences that could be improved.
+
+**Report:**
+{report_text}
+
+For each issue you find, provide:
+1. The specific text that needs improvement (exact quote from report)
+2. What the issue is (clarity, tone, grammar, redundancy, etc.)
+3. 2-3 alternative suggestions that maintain the writer's voice
+
+Focus on:
+- Clarity and conciseness
+- Professional but warm tone
+- Grammar and punctuation
+- Redundant phrasing
+- Vague statements that could be more specific
+
+Return ONLY a JSON array of suggestions in this exact format:
+[
+  {{
+    "original": "exact text from report",
+    "issue": "brief description of the issue",
+    "suggestions": ["alternative 1", "alternative 2"],
+    "start_index": 0,
+    "end_index": 20
+  }}
+]
+
+If the report is already excellent, return an empty array: []"""
+        
+        try:
+            if self.provider == 'openai':
+                response = self.client.chat.completions.create(
+                    model='gpt-4o-mini',
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.5,
+                    max_tokens=1000
+                )
+                result = response.choices[0].message.content.strip()
+            
+            elif self.provider == 'anthropic':
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=1000,
+                    temperature=0.5,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                result = response.content[0].text.strip()
+            
+            # Parse JSON response
+            import json
+            # Clean up markdown code blocks if present
+            if result.startswith('```'):
+                result = result.split('```')[1]
+                if result.startswith('json'):
+                    result = result[4:]
+                result = result.strip()
+            
+            suggestions = json.loads(result)
+            
+            # Find actual positions in text for each suggestion
+            for suggestion in suggestions:
+                original_text = suggestion.get('original', '')
+                if original_text in report_text:
+                    start_idx = report_text.find(original_text)
+                    suggestion['start_index'] = start_idx
+                    suggestion['end_index'] = start_idx + len(original_text)
+            
+            return suggestions if isinstance(suggestions, list) else []
+        
+        except Exception as e:
+            print(f"Error reviewing report: {e}")
+            return []
 
 
 def test_ai_connection():

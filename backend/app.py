@@ -11,9 +11,6 @@ from datetime import datetime
 from database import init_db, get_session, Student, Report, SampleReport, CalendarSession, UserSettings
 from ai_service import AIService, test_ai_connection
 
-# Load environment variables
-load_dotenv()
-
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
@@ -21,11 +18,15 @@ CORS(app)
 # Initialize database
 # Use dynamic path based on project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Load environment variables from project root
+load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
+AI_PROVIDER = os.getenv('AI_PROVIDER', 'openai')
+
 DB_PATH = os.getenv('DATABASE_PATH', os.path.join(PROJECT_ROOT, 'database', 'sage_reports.db'))
 init_db(DB_PATH)
 
 # Initialize AI service
-AI_PROVIDER = os.getenv('AI_PROVIDER', 'openai')
 ai_service = AIService(provider=AI_PROVIDER)
 
 
@@ -485,13 +486,13 @@ def suggest_sentences_for_report(report_id):
         cursor_position = data.get('cursor_position')
         student = session_db.query(Student).filter(Student.id == report.student_id).first()
         
-        # Get previous reports for style reference (training reports)
+        # Get previous reports for style reference (just a few for context)
         previous_reports = session_db.query(Report)\
             .filter(Report.student_id == report.student_id)\
             .filter(Report.id != report_id)\
             .filter(Report.use_for_training == True)\
             .order_by(Report.session_date.desc())\
-            .limit(8)\
+            .limit(5)\
             .all()
         
         previous_texts = []
@@ -520,7 +521,6 @@ def suggest_sentences_for_report(report_id):
 def polish_report_text(report_id):
     """Polish a selected portion of text"""
     data = request.json
-    session_db = get_session(DB_PATH)
     
     try:
         text_to_polish = data.get('text_to_polish', '')
@@ -529,41 +529,58 @@ def polish_report_text(report_id):
         if not text_to_polish:
             return jsonify({'error': 'No text provided'}), 400
         
-        # Get report and student info
+        # Polish the text
+        polished = ai_service.polish_text(text_to_polish, full_context)
+        
+        return jsonify({'polished_text': polished}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/reports/<int:report_id>/ask-ai', methods=['POST'])
+def ask_ai_about_text(report_id):
+    """Ask AI questions about selected text"""
+    data = request.json
+    session_db = get_session(DB_PATH)
+    
+    try:
         report = session_db.query(Report).filter(Report.id == report_id).first()
         if not report:
             return jsonify({'error': 'Report not found'}), 404
         
-        # Get previous reports for style reference (training reports)
-        previous_reports = session_db.query(Report)\
-            .filter(Report.student_id == report.student_id)\
-            .filter(Report.id != report_id)\
-            .filter(Report.use_for_training == True)\
-            .order_by(Report.session_date.desc())\
-            .limit(8)\
-            .all()
+        selected_text = data.get('selected_text', '')
+        question = data.get('question', '')
+        full_report = data.get('full_report', '')
+        conversation_history = data.get('conversation_history', [])
         
-        previous_texts = []
-        for prev_report in previous_reports:
-            text = prev_report.final_report or prev_report.ai_generated_report
-            if text:
-                previous_texts.append(text)
+        if not selected_text or not question:
+            return jsonify({'error': 'Missing required fields'}), 400
         
-        # Polish the text with style reference
-        polished = ai_service.polish_text(text_to_polish, full_context, previous_texts)
+        # Get student name for context
+        student = session_db.query(Student).filter(Student.id == report.student_id).first()
+        student_name = student.name if student else 'the student'
         
-        return jsonify({'polished_text': polished}), 200
+        # Ask AI
+        answer = ai_service.ask_about_text(
+            selected_text=selected_text,
+            question=question,
+            full_report=full_report,
+            student_name=student_name,
+            conversation_history=conversation_history
+        )
+        
+        return jsonify({'answer': answer}), 200
     except Exception as e:
+        print(f"Error in ask_ai_about_text: {str(e)}")
         return jsonify({'error': str(e)}), 400
     finally:
         session_db.close()
 
 
-@app.route('/api/reports/<int:report_id>/suggest-synonyms', methods=['POST'])
-def suggest_synonyms_for_word(report_id):
-    """Generate synonym suggestions for a selected word"""
+@app.route('/api/reports/<int:report_id>/get-synonyms', methods=['POST'])
+def get_synonyms_endpoint(report_id):
+    """Get synonyms for a word in context"""
     data = request.json
-    session_db = get_session(DB_PATH)
     
     try:
         word = data.get('word', '')
@@ -572,79 +589,41 @@ def suggest_synonyms_for_word(report_id):
         if not word:
             return jsonify({'error': 'No word provided'}), 400
         
-        # Get report and student info
-        report = session_db.query(Report).filter(Report.id == report_id).first()
-        if not report:
-            return jsonify({'error': 'Report not found'}), 404
-        
-        # Get previous reports for style reference (training reports)
-        previous_reports = session_db.query(Report)\
-            .filter(Report.student_id == report.student_id)\
-            .filter(Report.id != report_id)\
-            .filter(Report.use_for_training == True)\
-            .order_by(Report.session_date.desc())\
-            .limit(5)\
-            .all()
-        
-        previous_texts = []
-        for prev_report in previous_reports:
-            text = prev_report.final_report or prev_report.ai_generated_report
-            if text:
-                previous_texts.append(text)
-        
-        # Generate synonyms with style reference
-        synonyms = ai_service.suggest_synonyms(word, context, previous_texts)
+        # Get synonyms from AI
+        synonyms = ai_service.get_synonyms(word, context)
         
         return jsonify({'synonyms': synonyms}), 200
     except Exception as e:
-        print(f"Error in suggest_synonyms_for_word: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error getting synonyms: {str(e)}")
         return jsonify({'error': str(e)}), 400
-    finally:
-        session_db.close()
 
 
 @app.route('/api/reports/<int:report_id>/review-phrases', methods=['POST'])
-def review_report_phrases(report_id):
-    """Review entire report and find phrases that need improvement"""
+def review_phrases_endpoint(report_id):
+    """Review report for improvements"""
     data = request.json
     session_db = get_session(DB_PATH)
     
     try:
+        report = session_db.query(Report).filter(Report.id == report_id).first()
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
         report_text = data.get('report_text', '')
         
         if not report_text:
             return jsonify({'error': 'No report text provided'}), 400
         
-        # Get report and student info
-        report = session_db.query(Report).filter(Report.id == report_id).first()
-        if not report:
-            return jsonify({'error': 'Report not found'}), 404
-        
-        # Get previous reports for style reference (training reports)
-        previous_reports = session_db.query(Report)\
-            .filter(Report.student_id == report.student_id)\
-            .filter(Report.id != report_id)\
-            .filter(Report.use_for_training == True)\
-            .order_by(Report.session_date.desc())\
-            .limit(8)\
-            .all()
-        
-        previous_texts = []
-        for prev_report in previous_reports:
-            text = prev_report.final_report or prev_report.ai_generated_report
-            if text:
-                previous_texts.append(text)
+        # Get student name for context
+        student = session_db.query(Student).filter(Student.id == report.student_id).first()
+        student_name = student.name if student else 'the student'
         
         # Review the report
-        suggestions = ai_service.review_report_phrases(report_text, previous_texts)
+        suggestions = ai_service.review_report(report_text, student_name)
         
         return jsonify({'suggestions': suggestions}), 200
     except Exception as e:
-        print(f"Error in review_report_phrases: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error reviewing report: {str(e)}")
         return jsonify({'error': str(e)}), 400
     finally:
         session_db.close()
@@ -1186,13 +1165,13 @@ def get_calendar_sessions():
         # This way deleted overrides can be detected to hide recurring sessions
         
         if start_date:
-            # Handle 'Z' timezone indicator (replace with +00:00 for Python's fromisoformat)
-            start_date_parsed = start_date.replace('Z', '+00:00') if start_date.endswith('Z') else start_date
-            query = query.filter(CalendarSession.session_date >= datetime.fromisoformat(start_date_parsed))
+            # Handle ISO format with 'Z' suffix (replace Z with +00:00 for Python compatibility)
+            start_date_parsed = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            query = query.filter(CalendarSession.session_date >= start_date_parsed)
         if end_date:
-            # Handle 'Z' timezone indicator (replace with +00:00 for Python's fromisoformat)
-            end_date_parsed = end_date.replace('Z', '+00:00') if end_date.endswith('Z') else end_date
-            query = query.filter(CalendarSession.session_date <= datetime.fromisoformat(end_date_parsed))
+            # Handle ISO format with 'Z' suffix
+            end_date_parsed = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            query = query.filter(CalendarSession.session_date <= end_date_parsed)
         
         sessions = query.order_by(CalendarSession.session_date).all()
         return jsonify([s.to_dict() for s in sessions])
@@ -1207,9 +1186,13 @@ def create_calendar_session():
     session = get_session(DB_PATH)
     
     try:
+        session_date_str = data.get('session_date')
+        # Handle ISO format with 'Z' suffix
+        session_date = datetime.fromisoformat(session_date_str.replace('Z', '+00:00'))
+        
         calendar_session = CalendarSession(
             student_id=data.get('student_id'),
-            session_date=datetime.fromisoformat(data.get('session_date')),
+            session_date=session_date,
             duration_hours=data.get('duration_hours', '1'),
             status=data.get('status', 'scheduled'),
             notes=data.get('notes'),
@@ -1240,7 +1223,8 @@ def update_calendar_session(session_id):
         
         # Update fields
         if 'session_date' in data:
-            calendar_session.session_date = datetime.fromisoformat(data['session_date'])
+            # Handle ISO format with 'Z' suffix
+            calendar_session.session_date = datetime.fromisoformat(data['session_date'].replace('Z', '+00:00'))
         if 'duration_hours' in data:
             calendar_session.duration_hours = data['duration_hours']
         if 'status' in data:
@@ -1466,38 +1450,13 @@ def update_user_settings():
 # ============================================
 
 if __name__ == '__main__':
-    # Try port 5000, but use 5001 if it's in use (common on macOS with AirPlay)
     port = int(os.getenv('FLASK_PORT', 5000))
-    # Use 0.0.0.0 to accept connections from network, not just localhost
-    host = os.getenv('FLASK_HOST', '0.0.0.0')
-    
-    # Check if port is in use and try alternative
-    import socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    if sock.connect_ex(('127.0.0.1', port)) == 0:
-        print(f"⚠️  Port {port} is in use, trying port 5001...")
-        port = 5001
-    sock.close()
+    host = os.getenv('FLASK_HOST', '127.0.0.1')
     
     print(f"\n🎓 Sage Tutoring Report System")
     print(f"📊 Server running at http://{host}:{port}")
     print(f"🤖 AI Provider: {AI_PROVIDER}")
     print(f"💾 Database: {os.path.abspath(DB_PATH)}")
-    print(f"💾 Database exists: {os.path.exists(DB_PATH)}")
-    
-    # Show network access info
-    import socket
-    try:
-        # Get local IP address
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-        print(f"🌐 Access from other devices on your network:")
-        print(f"   http://{local_ip}:{port}")
-    except:
-        pass
-    
-    print()
+    print(f"💾 Database exists: {os.path.exists(DB_PATH)}\n")
     
     app.run(host=host, port=port, debug=True)

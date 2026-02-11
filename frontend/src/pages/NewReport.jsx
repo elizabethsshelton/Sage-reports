@@ -17,7 +17,7 @@ function NewReport() {
     topics_covered: '',
     activities: '',
     notes: '',
-    next_session_notes: ''
+    ai_instructions: ''
   })
   const [newStudentData, setNewStudentData] = useState({
     name: '',
@@ -402,23 +402,19 @@ function NewReport() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-sage-700 mb-1">
-                Reminders for Next Session
+              <label className="block text-sm font-medium text-purple-700 mb-1">
+                AI Writing Instructions (Optional)
               </label>
               <textarea
-                value={formData.next_session_notes}
-                onChange={(e) => {
-                  let newValue = e.target.value
-                  // Auto-convert "- " to "• "
-                  if (newValue.endsWith('- ')) {
-                    newValue = newValue.slice(0, -2) + '• '
-                  }
-                  setFormData({ ...formData, next_session_notes: newValue })
-                }}
-                className="w-full px-3 py-2 border border-sage-300 rounded-lg focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
+                value={formData.ai_instructions}
+                onChange={(e) => setFormData({ ...formData, ai_instructions: e.target.value })}
+                className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 rows={3}
-                placeholder="e.g., Review for Friday's test, bring homework packet, focus on quadratic formula"
+                placeholder="e.g., 'Keep it brief and focus on his enthusiasm', 'Highlight her progress in algebra'"
               />
+              <p className="text-xs text-purple-500 mt-1">
+                Tell the AI how you'd like this specific report to be written.
+              </p>
             </div>
 
           </div>
