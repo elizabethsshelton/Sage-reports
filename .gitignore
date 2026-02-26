@@ -34,3 +34,7 @@ sample_reports/*.docx
 
 # Backups
 backups/
+
+# Fine-tuning data
+finetune_data/
+*.jsonl
