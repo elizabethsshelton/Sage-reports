@@ -63,6 +63,11 @@ export const getReport = async (id) => {
   return response.data
 }
 
+export const analyzeNotes = async (notesData) => {
+  const response = await api.post('/reports/analyze-notes', notesData)
+  return response.data
+}
+
 export const generateReport = async (reportData) => {
   const response = await api.post('/reports/generate', reportData)
   return response.data

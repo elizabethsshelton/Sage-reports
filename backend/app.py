@@ -244,6 +244,43 @@ def create_report():
         session.close()
 
 
+@app.route('/api/reports/analyze-notes', methods=['POST'])
+def analyze_notes():
+    """Analyze session notes to identify missing information"""
+    data = request.json
+    session = get_session(DB_PATH)
+    
+    try:
+        # Get student info
+        student_id = data.get('student_id')
+        student = session.query(Student).filter(Student.id == student_id).first()
+        if not student:
+            return jsonify({'error': 'Student not found'}), 404
+        
+        # Get session data
+        student_name = student.name
+        subject = student.subject or data.get('subject', '')
+        topics_covered = data.get('topics_covered', '')
+        activities = data.get('activities', '')
+        notes = data.get('notes', '')
+        
+        # Analyze for gaps
+        analysis = ai_service.analyze_notes_for_gaps(
+            student_name=student_name,
+            subject=subject,
+            topics_covered=topics_covered,
+            activities=activities,
+            notes=notes
+        )
+        
+        return jsonify(analysis), 200
+        
+    except Exception as e:
+        print(f"Error analyzing notes: {e}")
+        # Don't block generation on analysis failure
+        return jsonify({'has_gaps': False, 'questions': []}), 200
+
+
 @app.route('/api/reports/generate', methods=['POST'])
 def generate_report():
     """Generate a new report using AI"""

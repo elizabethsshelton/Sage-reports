@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Sparkles, ArrowLeft, Loader } from 'lucide-react'
-import { getStudents, generateReport, getStats, createStudent, createReport, getSessionReminders, getCalendarSessionForDate } from '../services/api'
+import { Sparkles, ArrowLeft, Loader, X } from 'lucide-react'
+import { getStudents, analyzeNotes, generateReport, getStats, createStudent, createReport, getSessionReminders, getCalendarSessionForDate } from '../services/api'
 
 function NewReport() {
   const navigate = useNavigate()
@@ -26,6 +26,11 @@ function NewReport() {
   const [savingDraft, setSavingDraft] = useState(false)
   const [reminders, setReminders] = useState(null)
   const [loadingReminders, setLoadingReminders] = useState(false)
+  const [showQuestionsModal, setShowQuestionsModal] = useState(false)
+  const [questions, setQuestions] = useState([])
+  const [answers, setAnswers] = useState({})
+  const [analyzingNotes, setAnalyzingNotes] = useState(false)
+  const [pendingStudentId, setPendingStudentId] = useState(null)
 
   useEffect(() => {
     loadStudents()
@@ -147,11 +152,67 @@ function NewReport() {
       return
     }
 
-    setLoading(true)
+    // First, analyze notes for missing information
+    setAnalyzingNotes(true)
     try {
+      const analysis = await analyzeNotes({
+        student_id: studentId,
+        topics_covered: formData.topics_covered,
+        activities: formData.activities,
+        notes: formData.notes
+      })
+      
+      // If there are gaps, show questions modal
+      if (analysis.has_gaps && analysis.questions && analysis.questions.length > 0) {
+        setQuestions(analysis.questions)
+        setAnswers({}) // Reset answers
+        setPendingStudentId(studentId)
+        setShowQuestionsModal(true)
+        setAnalyzingNotes(false)
+        return // Don't generate yet, wait for user to answer questions
+      }
+      
+      // No gaps, proceed with generation
+      setAnalyzingNotes(false)
+      setLoading(true)
       const report = await generateReport({ 
         ...formData, 
         student_id: studentId
+      })
+      navigate(`/reports/${report.id}/edit`)
+    } catch (error) {
+      console.error('Error generating report:', error)
+      alert('Error generating report. Please check your AI configuration and try again.')
+      setAnalyzingNotes(false)
+      setLoading(false)
+    }
+  }
+
+  const handleGenerateWithAnswers = async (skipQuestions = false) => {
+    setShowQuestionsModal(false)
+    setLoading(true)
+    
+    try {
+      // Build additional context from answers
+      let additionalContext = ''
+      if (!skipQuestions) {
+        const answeredQuestions = Object.entries(answers)
+          .filter(([_, answer]) => answer && answer.trim())
+          .map(([qId, answer]) => {
+            const question = questions.find(q => q.id === qId)
+            return `${question?.question} ${answer}`
+          })
+          .join('\n')
+        
+        if (answeredQuestions) {
+          additionalContext = `\n\nAdditional Information:\n${answeredQuestions}`
+        }
+      }
+      
+      const report = await generateReport({ 
+        ...formData,
+        notes: formData.notes + additionalContext,
+        student_id: pendingStudentId
       })
       navigate(`/reports/${report.id}/edit`)
     } catch (error) {
@@ -440,10 +501,15 @@ function NewReport() {
             </button>
             <button
               type="submit"
-              disabled={loading || savingDraft}
+              disabled={loading || savingDraft || analyzingNotes}
               className="px-8 py-3 bg-sage-600 text-white font-semibold rounded-xl hover:bg-sage-700 transition-smooth hover-lift shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
-              {loading ? (
+              {analyzingNotes ? (
+                <>
+                  <Loader className="w-5 h-5 mr-2 animate-spin" />
+                  Analyzing notes...
+                </>
+              ) : loading ? (
                 <>
                   <Loader className="w-5 h-5 mr-2 animate-spin" />
                   Generating Report...
@@ -509,6 +575,87 @@ function NewReport() {
         ) : null}
       </div>
       </div>
+
+      {/* Questions Modal */}
+      {showQuestionsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setShowQuestionsModal(false)}>
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6 max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-sage-800 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-purple-600" />
+                  Quick Questions to Enhance Report
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  The AI noticed some missing details. Answer these to improve the report (optional).
+                </p>
+              </div>
+              <button
+                onClick={() => setShowQuestionsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {questions.map((q, idx) => (
+                <div key={q.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <label className="block mb-2">
+                    <span className="text-sm font-medium text-gray-800 flex items-center gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                        {idx + 1}
+                      </span>
+                      {q.question}
+                    </span>
+                    {q.reason && (
+                      <span className="text-xs text-gray-500 mt-1 block ml-8">
+                        {q.reason}
+                      </span>
+                    )}
+                  </label>
+                  <textarea
+                    value={answers[q.id] || ''}
+                    onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                    placeholder="Your answer (optional)..."
+                    className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                    rows="2"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => handleGenerateWithAnswers(true)}
+                className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                Skip Questions
+              </button>
+              <button
+                onClick={() => handleGenerateWithAnswers(false)}
+                disabled={loading}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-medium rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Generate Report
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

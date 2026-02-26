@@ -16,7 +16,15 @@ class AIService:
             try:
                 from openai import OpenAI
                 self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-                self.model = 'gpt-4o-mini'  # Using cost-effective model
+                
+                # Use fine-tuned model if available, otherwise fall back to base
+                self.finetuned_model = os.getenv('FINETUNED_MODEL_ID')
+                if self.finetuned_model:
+                    self.model = self.finetuned_model
+                    print(f"✨ Using fine-tuned model: {self.finetuned_model}")
+                else:
+                    self.model = 'gpt-4o-mini'  # Base model fallback
+                    print("Using base model: gpt-4o-mini")
             except Exception as e:
                 print(f"Error initializing OpenAI: {e}")
                 self.client = None
@@ -1258,6 +1266,106 @@ If the report is already excellent, return an empty array: []"""
         except Exception as e:
             print(f"Error reviewing report: {e}")
             return []
+    
+    def analyze_notes_for_gaps(
+        self,
+        student_name: str,
+        subject: str,
+        topics_covered: str,
+        activities: str,
+        notes: str
+    ) -> Dict:
+        """
+        Analyze session notes to identify missing information that would enhance the report.
+        Only returns questions if there are actual gaps - returns empty if notes are complete.
+        
+        Returns:
+            {
+                'has_gaps': bool,
+                'questions': [{'id': str, 'question': str, 'reason': str}]
+            }
+        """
+        
+        if not self.client:
+            return {'has_gaps': False, 'questions': []}
+        
+        prompt = f"""Analyze these tutoring session notes to determine if any CRITICAL information is missing that would significantly improve the report quality.
+
+Student: {student_name}
+Subject: {subject or 'Not specified'}
+Topics Covered: {topics_covered or 'Not specified'}
+Activities: {activities or 'Not specified'}
+Session Notes: {notes or 'Not specified'}
+
+IMPORTANT RULES:
+1. ONLY flag something as missing if it's truly important for a parent to know
+2. DO NOT ask about information that's already present (even if vague)
+3. DO NOT ask for unnecessary details
+4. Focus on: major struggles/breakthroughs, specific mistakes, performance assessment, next steps
+5. Maximum 3 questions, ideally 1-2
+
+Return a JSON object in this EXACT format:
+{{
+  "has_gaps": true/false,
+  "questions": [
+    {{
+      "id": "q1",
+      "question": "Specific question here?",
+      "reason": "Why this matters for the report"
+    }}
+  ]
+}}
+
+If the notes are reasonably complete (have topics, some detail about performance), return:
+{{
+  "has_gaps": false,
+  "questions": []
+}}"""
+
+        try:
+            if self.provider == 'openai':
+                # Use base gpt-4o-mini for analysis (fast and cheap)
+                response = self.client.chat.completions.create(
+                    model='gpt-4o-mini',
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3,
+                    max_tokens=500
+                )
+                result = response.choices[0].message.content.strip()
+            
+            elif self.provider == 'anthropic':
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=500,
+                    temperature=0.3,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                result = response.content[0].text.strip()
+            
+            # Parse JSON response
+            import json
+            # Clean up markdown code blocks if present
+            if result.startswith('```'):
+                result = result.split('```')[1]
+                if result.startswith('json'):
+                    result = result[4:]
+                result = result.strip()
+            
+            analysis = json.loads(result)
+            
+            # Validate structure
+            if not isinstance(analysis, dict):
+                return {'has_gaps': False, 'questions': []}
+            
+            return {
+                'has_gaps': analysis.get('has_gaps', False),
+                'questions': analysis.get('questions', [])
+            }
+        
+        except Exception as e:
+            print(f"Error analyzing notes for gaps: {e}")
+            # If analysis fails, don't block report generation
+            return {'has_gaps': False, 'questions': []}
 
 
 def test_ai_connection():
