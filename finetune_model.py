@@ -7,7 +7,11 @@ import os
 import json
 import sqlite3
 from datetime import datetime
+from dotenv import load_dotenv
 from openai import OpenAI
+
+# Load environment variables first
+load_dotenv()
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -25,7 +29,7 @@ def extract_training_data():
         r.id,
         r.student_id,
         s.name as student_name,
-        r.subject,
+        s.subject,
         r.topics_covered,
         r.activities,
         r.notes,
@@ -244,14 +248,10 @@ def main():
     print(f"   User input length: {len(examples[0]['messages'][1]['content'])} chars")
     print(f"   Expected output length: {len(examples[0]['messages'][2]['content'])} chars")
     
-    # Step 4: Confirm
+    # Step 4: Auto-proceed (user already confirmed)
     print(f"\n💰 Estimated cost: ~$80-100 for training")
     print(f"   ({len(reports)} examples × ~2K tokens × 2 × 3 epochs)")
-    response = input(f"\nProceed with fine-tuning? (y/n): ")
-    
-    if response.lower() != 'y':
-        print("❌ Cancelled")
-        return
+    print(f"\n✅ Proceeding with fine-tuning...")
     
     # Step 5: Upload and start training
     job_id, file_id = upload_and_train(filepath)
@@ -260,25 +260,17 @@ def main():
         print("❌ Failed to start fine-tuning job")
         return
     
-    # Step 6: Monitor (optional - can exit and check later)
+    # Step 6: Monitor progress
     print(f"\n⏰ The fine-tuning job is now running...")
-    response = input(f"Monitor progress now? (y/n - you can check later): ")
+    print(f"   Monitoring progress (this will take 30-60 minutes)...")
     
-    if response.lower() == 'y':
-        model_id = monitor_job(job_id)
-        if model_id:
-            save_model_info(model_id, job_id, file_id, len(reports))
-    else:
-        print(f"\n✅ Job started! Check status later with:")
-        print(f"   python check_finetune_status.py {job_id}")
+    model_id = monitor_job(job_id)
+    if model_id:
+        save_model_info(model_id, job_id, file_id, len(reports))
     
     print("\n" + "=" * 60)
     print("✅ FINE-TUNING PIPELINE COMPLETE")
     print("=" * 60)
 
 if __name__ == "__main__":
-    # Load environment variables
-    from dotenv import load_dotenv
-    load_dotenv()
-    
     main()
