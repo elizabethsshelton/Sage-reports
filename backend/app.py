@@ -365,21 +365,37 @@ def generate_report():
         minimal_editing = data.get('minimal_editing', False)
         include_contact = data.get('include_contact', False)
         
-        ai_report = ai_service.generate_report(
-            student_name=student.name,
-            subject=data.get('subject', student.subject),
-            topics_covered=data.get('topics_covered', ''),
-            activities=data.get('activities', ''),
-            notes=data.get('notes', ''),
-            sample_reports=sample_texts,
-            previous_reports=previous_report_dicts,
-            minimal_editing=minimal_editing,
-            parent_name=student.parent_name,
-            tutor_name=user_settings.tutor_name if user_settings else None,
-            include_contact=include_contact,
-            tutor_phone=user_settings.phone if user_settings else None,
-            tutor_email=user_settings.email if user_settings else None
-        )
+        print(f"\n{'='*60}")
+        print(f"🎯 GENERATING REPORT FOR: {student.name}")
+        print(f"   AI Service Client: {ai_service.client}")
+        print(f"   AI Service Provider: {ai_service.provider}")
+        print(f"   AI Service Model: {ai_service.model}")
+        print(f"   Sample Reports Count: {len(sample_texts)}")
+        print(f"{'='*60}\n")
+        
+        try:
+            ai_report = ai_service.generate_report(
+                student_name=student.name,
+                subject=data.get('subject', student.subject),
+                topics_covered=data.get('topics_covered', ''),
+                activities=data.get('activities', ''),
+                notes=data.get('notes', ''),
+                sample_reports=sample_texts,
+                previous_reports=previous_report_dicts,
+                minimal_editing=minimal_editing,
+                parent_name=student.parent_name,
+                tutor_name=user_settings.tutor_name if user_settings else None,
+                include_contact=include_contact,
+                tutor_phone=user_settings.phone if user_settings else None,
+                tutor_email=user_settings.email if user_settings else None,
+                ai_instructions=data.get('ai_instructions', '')
+            )
+            print(f"✅ Report generated successfully! Length: {len(ai_report)} chars")
+        except Exception as e:
+            print(f"❌ ERROR IN GENERATE ENDPOINT: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Create and save the report
         report = Report(
