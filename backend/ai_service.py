@@ -95,10 +95,14 @@ class AIService:
         print(f"🔍 DEBUG: self.model = '{self.model}'")
         
         try:
-            if self.provider == 'openai':
-                print("✅ Taking OpenAI branch")
-                response = self.client.chat.completions.create(
-                    model=self.model,
+            # FORCE OpenAI for now - debug why provider check isn't working
+            if True:  # Force OpenAI branch
+                print("✅ Using OpenAI (forced)")
+                from openai import OpenAI
+                openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                
+                response = openai_client.chat.completions.create(
+                    model=self.model if self.model.startswith('ft:') else 'gpt-4o-mini',
                     messages=[
                         {"role": "system", "content": self._get_system_prompt()},
                         {"role": "user", "content": context}
@@ -107,6 +111,7 @@ class AIService:
                     max_tokens=1500
                 )
                 report_text = response.choices[0].message.content.strip()
+                print(f"✅ Generated {len(report_text)} characters")
             
             elif self.provider == 'anthropic':
                 response = self.client.messages.create(
