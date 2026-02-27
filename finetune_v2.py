@@ -275,7 +275,7 @@ def test_model(model_id, test_examples):
             print(f"  ❌ Error: {e}")
     
     print(f"\n{'='*60}")
-    input("Review the tests above. Press Enter to continue...")
+    print("✅ Testing complete - review results above")
 
 def save_model_info(model_id, job_id, file_id, num_examples):
     """Save model information"""
@@ -356,18 +356,14 @@ def main():
     print(f"      {examples[0]['messages'][1]['content'][:150]}...")
     print(f"   Sample output length: {len(examples[0]['messages'][2]['content'])} chars")
     
-    # Confirm
+    # Auto-proceed
     print(f"\n💰 Estimated cost: ~$80-100")
     print(f"   ({len(valid_reports)} examples × 2 epochs × ~2K tokens)")
     print(f"\n🔧 Training config:")
     print(f"   Epochs: 2 (reduced)")
     print(f"   Learning rate: 0.3x (conservative)")
     print(f"   Focus: Content accuracy > Style perfection")
-    
-    response = input(f"\n✅ Proceed with v2 training? (y/n): ")
-    if response.lower() != 'y':
-        print("❌ Cancelled")
-        return
+    print(f"\n✅ Auto-proceeding with training...")
     
     # Upload and train
     job_id, file_id = upload_and_train(filepath)
