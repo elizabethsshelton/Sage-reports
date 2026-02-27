@@ -3,8 +3,9 @@ AI Service for generating tutoring reports
 """
 
 import os
-from typing import List, Dict, Optional
 from datetime import datetime
+from typing import List, Dict, Optional
+import re
 
 class AIService:
     """Handles AI report generation using OpenAI or Anthropic"""
@@ -125,6 +126,13 @@ class AIService:
                 student_name, subject, topics_covered, activities, notes
             )
         
+        # Strip any AI-generated sign-off so we don't get duplicates
+        report_text = re.sub(
+            r'\n*(Best|Sincerely|Thanks|Thank you),\n[^\n]+(?:\n[^\n]+)*$',
+            '',
+            report_text
+        ).strip()
+
         # Append signature
         signature = self._build_signature(tutor_name, include_contact, tutor_phone, tutor_email)
         if signature:
@@ -135,7 +143,7 @@ class AIService:
     def _get_system_prompt(self) -> str:
         """Get the system prompt for report generation"""
         return """Your job is to write a tutoring session report that sounds EXACTLY like the example reports provided.
-
+        
 CRITICAL - Your #1 priority is to MIMIC THE STYLE of the sample reports:
 - Study how the writer structures their paragraphs
 - Notice their sentence length and rhythm
@@ -154,11 +162,19 @@ PUNCTUATION RULES:
 - Use regular hyphens (-) NOT em dashes (—)
 - Keep punctuation simple and natural
 
-STRUCTURE:
+STRUCTURE AND CONTENT:
 - Start with the greeting, then add a warm opening sentence - vary the wording but keep the idea of being glad to see them (e.g., "It was great to see [Student] again this week!" or "Always a pleasure working with [Student]!" or "Good to see [Student] today!")
 - 2-5 body paragraphs covering what was done, how the student performed, areas to work on
 - Closing: If relevant, add 1-2 context sentences first (e.g., "Wishing her luck on her test!" or "[Student] is working hard and showing great progress."). Then ALWAYS end with a forward-looking sentence - vary the wording but keep the idea (e.g., "Looking forward to seeing [Student] again next week!" or "See you next session!" or "Can't wait to work with [Student] again!")
 - NO sign-off like "Best," or "Sincerely," (system adds that automatically)
+
+HOW TO USE THE NOTES:
+- You will receive rough, sometimes choppy session notes
+- Your job is to transform those notes into smooth, flowing paragraphs for parents
+- Combine and reorganize related points instead of repeating them line by line
+- Add natural transitions and connective language so the report reads like a cohesive story
+- Cover all of the important points and details from the notes, but you may lightly condense repetitive or low-level details so the report doesn't feel like a transcript
+- Stay strictly grounded in the notes: do NOT invent specific activities, assignments, locations, or events that are not in the notes
 
 The sample reports show you exactly how this writer sounds. Copy that voice and structure."""
     
@@ -246,8 +262,15 @@ What We Did:
 """
         
         if notes:
-            context += f"\n**TUTOR'S NOTES (CRITICAL - USE ALL OF THIS CONTENT):**\n{notes}\n"
-            context += "\n🔴 **CRITICAL INSTRUCTION:** The tutor has provided detailed notes above. You MUST include ALL the information from these notes in the report. Do not skip or summarize any points - every detail matters. Expand on these notes naturally in the report style, but ensure EVERY point is covered.\n"
+            context += f"\n**TUTOR'S NOTES (PRIMARY SOURCE – USE FOR CONTENT):**\n{notes}\n"
+            context += (
+                "\n🔴 **CRITICAL INSTRUCTION:** The tutor has provided detailed notes above. "
+                "Your report should cover all of the important points and meaningful details from these notes. "
+                "You may combine or lightly condense repetitive or very low-level details so the report reads smoothly, "
+                "but the main ideas and significant observations should all appear in the final report. "
+                "Your job is to transform these rough notes into polished paragraphs with good flow, adding natural transitions "
+                "and connective language while staying factually grounded in the notes.\n"
+            )
         
         # Add sample reports for style reference
         if sample_reports and len(sample_reports) > 0:
@@ -274,13 +297,28 @@ What We Did:
         context += "\n**Your Task:**\n"
         context += "Write a session report for this student using the EXACT same style, tone, and structure as the example reports above.\n\n"
         context += "Key reminders:\n"
-        context += f"- 🔴 MOST IMPORTANT: Include ALL content from the tutor's notes - don't skip anything!\n"
+        context += (
+            f"- 🔴 MOST IMPORTANT: Include all of the important points from the tutor's notes. "
+            "You can reorganize and lightly condense them so the report flows naturally, but do not leave out meaningful observations.\n"
+        )
         context += f"- ALWAYS use only the first name \"{student_first_name}\" - NEVER use the full name\n"
         context += f"- Start with a warm opening sentence after the greeting - vary the wording each time but keep the idea of being glad to see them (e.g., 'It was great to see {student_first_name} again this week!' or 'Always a pleasure working with {student_first_name}!' or 'Good to see {student_first_name} today!')\n"
         context += "- Copy the casual, direct, conversational voice from the examples\n"
-        context += "- 2-5 body paragraphs covering what was done and how the student did (include EVERYTHING from the notes)\n"
-        context += f"- Closing: If relevant to the session, add 1-2 context sentences first (e.g., if there's a test: 'Wishing her luck on her test!' or if showing progress: '{student_first_name} is working hard and showing great progress.'). Then ALWAYS end with a forward-looking sentence - vary the wording but keep the idea (e.g., 'Looking forward to seeing {student_first_name} again next week!' or 'See you next session!' or 'Can't wait to work with {student_first_name} again!')\n"
-        context += "- Use the writer's natural phrasing - don't make it more formal or detailed than the examples\n"
+        context += (
+            "- 2-5 body paragraphs covering what was done and how the student did, weaving in the key ideas from the notes "
+            "instead of listing them line by line\n"
+        )
+        context += (
+            f"- Closing: If relevant to the session, add 1-2 context sentences first (e.g., if there's a test: "
+            f"'Wishing her luck on her test!' or if showing progress: '{student_first_name} is working hard and showing great progress.'). "
+            "Then ALWAYS end with a forward-looking sentence - vary the wording but keep the idea "
+            f"(e.g., 'Looking forward to seeing {student_first_name} again next week!' or 'See you next session!' or "
+            f"'Can't wait to work with {student_first_name} again!')\n"
+        )
+        context += (
+            "- Use the writer's natural phrasing and tone, but feel free to expand short, choppy notes into full, "
+            "parent-friendly explanations with good flow (without inventing new events or facts)\n"
+        )
         context += "- NO bullet points, NO section headers - just flowing paragraphs like the examples\n"
         context += "- Stop after the closing sentence - NO sign-off like 'Best,' (system adds that)\n\n"
         context += "Think: 'What would the writer of those example reports say about THIS session?'"
