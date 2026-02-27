@@ -152,29 +152,8 @@ function NewReport() {
       return
     }
 
-    // First, analyze notes for missing information
-    setAnalyzingNotes(true)
+    setLoading(true)
     try {
-      const analysis = await analyzeNotes({
-        student_id: studentId,
-        topics_covered: formData.topics_covered,
-        activities: formData.activities,
-        notes: formData.notes
-      })
-      
-      // If there are gaps, show questions modal
-      if (analysis.has_gaps && analysis.questions && analysis.questions.length > 0) {
-        setQuestions(analysis.questions)
-        setAnswers({}) // Reset answers
-        setPendingStudentId(studentId)
-        setShowQuestionsModal(true)
-        setAnalyzingNotes(false)
-        return // Don't generate yet, wait for user to answer questions
-      }
-      
-      // No gaps, proceed with generation
-      setAnalyzingNotes(false)
-      setLoading(true)
       const report = await generateReport({ 
         ...formData, 
         student_id: studentId
@@ -183,7 +162,7 @@ function NewReport() {
     } catch (error) {
       console.error('Error generating report:', error)
       alert('Error generating report. Please check your AI configuration and try again.')
-      setAnalyzingNotes(false)
+    } finally {
       setLoading(false)
     }
   }
@@ -501,15 +480,10 @@ function NewReport() {
             </button>
             <button
               type="submit"
-              disabled={loading || savingDraft || analyzingNotes}
+              disabled={loading || savingDraft}
               className="px-8 py-3 bg-sage-600 text-white font-semibold rounded-xl hover:bg-sage-700 transition-smooth hover-lift shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
-              {analyzingNotes ? (
-                <>
-                  <Loader className="w-5 h-5 mr-2 animate-spin" />
-                  Analyzing notes...
-                </>
-              ) : loading ? (
+              {loading ? (
                 <>
                   <Loader className="w-5 h-5 mr-2 animate-spin" />
                   Generating Report...
