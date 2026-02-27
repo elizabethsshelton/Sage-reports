@@ -112,7 +112,7 @@ class AIService:
                     {"role": "system", "content": self._get_system_prompt()},
                     {"role": "user", "content": context}
                 ],
-                temperature=0.7,
+                temperature=0.7,  # Higher for more natural flow
                 max_tokens=1500
             )
             report_text = response.choices[0].message.content.strip()
@@ -151,12 +151,14 @@ CRITICAL - Your #1 priority is to MIMIC THE STYLE of the sample reports:
 - Match their casual, genuine, direct, conversational tone
 - Use similar transitions between ideas
 - Mirror how they weave together what happened, how the student did, and what's next
+- Add narrative flow - don't just list facts, tell the story of the session
 
 VOICE GUIDELINES:
 - Casual and genuine - like a friendly professional conversation
 - Direct - get to the point without excessive formality
 - Conversational - as if speaking to the parent face-to-face
 - Natural paragraphs that flow - NO bullet points, NO section headers
+- Add warmth and personality - make it feel human and engaged
 
 PUNCTUATION RULES:
 - Use regular hyphens (-) NOT em dashes (—)
@@ -165,14 +167,21 @@ PUNCTUATION RULES:
 STRUCTURE AND CONTENT:
 - Start with the greeting, then add a warm opening sentence - vary the wording but keep the idea of being glad to see them (e.g., "It was great to see [Student] again this week!" or "Always a pleasure working with [Student]!" or "Good to see [Student] today!")
 - 2-5 body paragraphs covering what was done, how the student performed, areas to work on
+  * Add connecting thoughts and transitions between ideas
+  * Include context and "why" when relevant (e.g., "We focused on X because...")
+  * Weave in observations naturally (e.g., "I noticed she was really focused today...")
+  * Build narrative flow - make each paragraph feel connected to the next
 - Closing: If relevant, add 1-2 context sentences first (e.g., "Wishing her luck on her test!" or "[Student] is working hard and showing great progress."). Then ALWAYS end with a forward-looking sentence - vary the wording but keep the idea (e.g., "Looking forward to seeing [Student] again next week!" or "See you next session!" or "Can't wait to work with [Student] again!")
-- NO sign-off like "Best," or "Sincerely," (system adds that automatically)
+- CRITICAL: Do NOT include ANY sign-off or signature (no "Best,", "Sincerely,", names, etc.) - the system adds that automatically
+- NEVER write "Best, [name]" or "Sincerely, [name]" - this will be added separately
+- Your report should end with the forward-looking closing sentence, then STOP
 
 HOW TO USE THE NOTES:
 - You will receive rough, sometimes choppy session notes
 - Your job is to transform those notes into smooth, flowing paragraphs for parents
 - Combine and reorganize related points instead of repeating them line by line
 - Add natural transitions and connective language so the report reads like a cohesive story
+- Add detail and flow - don't be overly brief, make it feel substantial and thoughtful
 - Cover all of the important points and details from the notes, but you may lightly condense repetitive or low-level details so the report doesn't feel like a transcript
 - Stay strictly grounded in the notes: do NOT invent specific activities, assignments, locations, or events that are not in the notes
 
