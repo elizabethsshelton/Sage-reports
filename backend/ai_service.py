@@ -95,23 +95,27 @@ class AIService:
         print(f"🔍 DEBUG: self.model = '{self.model}'")
         
         try:
-            # FORCE OpenAI for now - debug why provider check isn't working
-            if True:  # Force OpenAI branch
-                print("✅ Using OpenAI (forced)")
-                from openai import OpenAI
-                openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-                
-                response = openai_client.chat.completions.create(
-                    model=self.model if self.model.startswith('ft:') else 'gpt-4o-mini',
-                    messages=[
-                        {"role": "system", "content": self._get_system_prompt()},
-                        {"role": "user", "content": context}
-                    ],
-                    temperature=0.7,
-                    max_tokens=1500
-                )
-                report_text = response.choices[0].message.content.strip()
-                print(f"✅ Generated {len(report_text)} characters")
+            # FORCE OpenAI with fine-tuned model
+            print("✅ Using OpenAI with fine-tuned model")
+            from openai import OpenAI
+            openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            
+            # Use fine-tuned model if available, else base model
+            finetuned_id = os.getenv('FINETUNED_MODEL_ID')
+            model_to_use = finetuned_id if finetuned_id else 'gpt-4o-mini'
+            print(f"🎯 Using model: {model_to_use}")
+            
+            response = openai_client.chat.completions.create(
+                model=model_to_use,
+                messages=[
+                    {"role": "system", "content": self._get_system_prompt()},
+                    {"role": "user", "content": context}
+                ],
+                temperature=0.7,
+                max_tokens=1500
+            )
+            report_text = response.choices[0].message.content.strip()
+            print(f"✅ Generated {len(report_text)} characters")
             
             elif self.provider == 'anthropic':
                 response = self.client.messages.create(
