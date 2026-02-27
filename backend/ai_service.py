@@ -95,7 +95,7 @@ class AIService:
         print(f"🔍 DEBUG: self.model = '{self.model}'")
         
         try:
-            # FORCE OpenAI with fine-tuned model
+            # FORCE OpenAI with fine-tuned model - ignore self.provider for now
             print("✅ Using OpenAI with fine-tuned model")
             from openai import OpenAI
             openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -116,18 +116,6 @@ class AIService:
             )
             report_text = response.choices[0].message.content.strip()
             print(f"✅ Generated {len(report_text)} characters")
-            
-            elif self.provider == 'anthropic':
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=1500,
-                    temperature=0.7,
-                    system=self._get_system_prompt(),
-                    messages=[
-                        {"role": "user", "content": context}
-                    ]
-                )
-                report_text = response.content[0].text.strip()
         
         except Exception as e:
             print(f"ERROR generating report: {type(e).__name__}: {e}")
