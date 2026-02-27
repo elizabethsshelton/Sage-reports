@@ -294,55 +294,61 @@ def generate_report():
         if not student:
             return jsonify({'error': 'Student not found'}), 404
         
-        # Get training data from reports table (only reports marked for training)
-        # This includes both created reports and uploaded historical reports that have use_for_training=True
-        import random
+        # If using fine-tuned model, we don't need sample reports (model already learned the style)
+        # Otherwise, get training data from reports table (only reports marked for training)
+        sample_texts = []
         
-        all_training_reports = session.query(Report)\
-            .filter(Report.use_for_training == True)\
-            .all()
-        
-        # Separate by student
-        student_reports = [r for r in all_training_reports if r.student_id == student_id and r.final_report]
-        other_reports = [r for r in all_training_reports if r.student_id != student_id and r.final_report]
-        
-        # STUDENT-SPECIFIC SELECTION (10 total)
-        student_texts = []
-        
-        # 1. Most recent 3 (for timeline/continuity)
-        recent_student = sorted(student_reports, key=lambda r: r.session_date, reverse=True)[:3]
-        student_texts.extend([r.final_report for r in recent_student])
-        
-        # 2. Longest 5 (for best quality examples)
-        longest_student = sorted(student_reports, key=lambda r: len(r.final_report or ''), reverse=True)[:5]
-        student_texts.extend([r.final_report for r in longest_student if r.final_report not in student_texts])
-        
-        # 3. Random 2 (for variety)
-        remaining_student = [r for r in student_reports if r.final_report not in student_texts]
-        if len(remaining_student) > 0:
-            random_student = random.sample(remaining_student, min(2, len(remaining_student)))
-            student_texts.extend([r.final_report for r in random_student])
-        
-        # GENERAL SELECTION (10 total)
-        general_texts = []
-        
-        # 1. Longest report from each of 5 different students (diversity + quality)
-        students_seen = set()
-        longest_per_student = sorted(other_reports, key=lambda r: len(r.final_report or ''), reverse=True)
-        for r in longest_per_student:
-            if r.student_id not in students_seen:
-                general_texts.append(r.final_report)
-                students_seen.add(r.student_id)
-            if len(students_seen) >= 5:
-                break
-        
-        # 2. Random 5 from different students not yet included
-        remaining_general = [r for r in other_reports if r.final_report not in general_texts]
-        if len(remaining_general) > 0:
-            random_general = random.sample(remaining_general, min(5, len(remaining_general)))
-            general_texts.extend([r.final_report for r in random_general])
-        
-        sample_texts = student_texts + general_texts
+        if not os.getenv('FINETUNED_MODEL_ID'):
+            # Only include sample reports if NOT using fine-tuned model
+            import random
+            
+            all_training_reports = session.query(Report)\
+                .filter(Report.use_for_training == True)\
+                .all()
+            
+            # Separate by student
+            student_reports = [r for r in all_training_reports if r.student_id == student_id and r.final_report]
+            other_reports = [r for r in all_training_reports if r.student_id != student_id and r.final_report]
+            
+            # STUDENT-SPECIFIC SELECTION (10 total)
+            student_texts = []
+            
+            # 1. Most recent 3 (for timeline/continuity)
+            recent_student = sorted(student_reports, key=lambda r: r.session_date, reverse=True)[:3]
+            student_texts.extend([r.final_report for r in recent_student])
+            
+            # 2. Longest 5 (for best quality examples)
+            longest_student = sorted(student_reports, key=lambda r: len(r.final_report or ''), reverse=True)[:5]
+            student_texts.extend([r.final_report for r in longest_student if r.final_report not in student_texts])
+            
+            # 3. Random 2 (for variety)
+            remaining_student = [r for r in student_reports if r.final_report not in student_texts]
+            if len(remaining_student) > 0:
+                random_student = random.sample(remaining_student, min(2, len(remaining_student)))
+                student_texts.extend([r.final_report for r in random_student])
+            
+            # GENERAL SELECTION (10 total)
+            general_texts = []
+            
+            # 1. Longest report from each of 5 different students (diversity + quality)
+            students_seen = set()
+            longest_per_student = sorted(other_reports, key=lambda r: len(r.final_report or ''), reverse=True)
+            for r in longest_per_student:
+                if r.student_id not in students_seen:
+                    general_texts.append(r.final_report)
+                    students_seen.add(r.student_id)
+                if len(students_seen) >= 5:
+                    break
+            
+            # 2. Random 5 from different students not yet included
+            remaining_general = [r for r in other_reports if r.final_report not in general_texts]
+            if len(remaining_general) > 0:
+                random_general = random.sample(remaining_general, min(5, len(remaining_general)))
+                general_texts.extend([r.final_report for r in random_general])
+            
+            sample_texts = student_texts + general_texts
+        else:
+            print("✨ Using fine-tuned model - skipping sample reports")
         
         # Get previous reports for this student
         previous_reports = session.query(Report)\
