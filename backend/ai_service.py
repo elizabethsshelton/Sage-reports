@@ -90,8 +90,13 @@ class AIService:
         
         # Generate the report
         report_text = ""
+        print(f"🔍 DEBUG: self.provider = '{self.provider}'")
+        print(f"🔍 DEBUG: self.client = {type(self.client)}")
+        print(f"🔍 DEBUG: self.model = '{self.model}'")
+        
         try:
             if self.provider == 'openai':
+                print("✅ Taking OpenAI branch")
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
