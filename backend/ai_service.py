@@ -127,10 +127,20 @@ class AIService:
             )
         
         # Strip any AI-generated sign-off so we don't get duplicates
+        # Handles: "Best,\nName", "Best, Name", "Best,  \nName", etc.
         report_text = re.sub(
-            r'\n*(Best|Sincerely|Thanks|Thank you),\n[^\n]+(?:\n[^\n]+)*$',
+            r'\n*(Best|Sincerely|Thanks|Thank you|Warm regards|Regards|Warmly|Cheers),\s*\n?\s*[A-Z][a-z]+\s*$',
             '',
-            report_text
+            report_text,
+            flags=re.IGNORECASE
+        ).strip()
+        
+        # Second pass: catch any trailing sign-offs that might remain
+        report_text = re.sub(
+            r'\n+(Best|Sincerely|Thanks|Thank you|Warm regards|Regards|Warmly|Cheers),?\s*$',
+            '',
+            report_text,
+            flags=re.IGNORECASE
         ).strip()
 
         # Append signature
