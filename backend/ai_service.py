@@ -1138,31 +1138,36 @@ Return the corrected version with ONLY grammar/spelling/punctuation fixes applie
         student_name: str,
         conversation_history: List[Dict] = None
     ) -> str:
-        """Answer questions about selected text from a report"""
+        """Answer questions about selected text from a report - ChatGPT-quality conversation"""
         if not self.client:
             return "AI service not available"
         
-        # Build conversation context
-        system_prompt = f"""You are a helpful AI assistant. You are chatting with a tutor who is writing a report for a parent about their tutoring session with {student_name}.
+        # Build conversation context - more natural and conversational
+        system_prompt = f"""You are ChatGPT, having a helpful conversation with Elizabeth, a tutor who's writing session reports for parents. She's working on a report about {student_name}.
 
-The tutor has selected a portion of their report and wants to ask you about it. Be helpful, supportive, and provide clear feedback or suggestions.
+Be conversational, supportive, and helpful - just like you normally are. She might ask about:
+- Whether something sounds right
+- How to rephrase something
+- Grammar or style questions
+- General writing advice
+- Tone and clarity
 
-Your goal is to have a natural, helpful conversation with the tutor about their writing. Be supportive and provide clear, actionable advice or insights based on their questions."""
+Respond naturally as if chatting with a colleague. Be friendly, concise, and actionable. If she highlights text, comment on it specifically. If it's a general question, answer helpfully.
+
+Keep responses focused and practical - she's in the middle of writing, so be helpful without overexplaining."""
         
-        user_prompt = f"""**Selected text from report:**
-"{selected_text}"
-
-**Full report context:**
-{full_report[:500]}...
-
-**Tutor's question:**
-{question}"""
+        # Build user message more naturally
+        if selected_text and selected_text.strip():
+            user_prompt = f'I highlighted this part:\n\n"{selected_text}"\n\n{question}'
+        else:
+            # No text selected, just general question
+            user_prompt = question
         
         try:
             if self.provider == 'openai':
                 messages = [{"role": "system", "content": system_prompt}]
                 
-                # Add conversation history
+                # Add conversation history naturally
                 if conversation_history:
                     for chat_item in conversation_history:
                         messages.append({"role": "user", "content": chat_item['question']})
@@ -1170,11 +1175,12 @@ Your goal is to have a natural, helpful conversation with the tutor about their 
                 
                 messages.append({"role": "user", "content": user_prompt})
                 
+                # Use GPT-4o for ChatGPT-quality responses
                 response = self.client.chat.completions.create(
-                    model='gpt-4o-mini',
+                    model='gpt-4o',  # Upgraded from gpt-4o-mini
                     messages=messages,
-                    temperature=0.8,
-                    max_tokens=500
+                    temperature=0.7,  # Slightly lower for more focused responses
+                    max_tokens=800  # Increased for more detailed help
                 )
                 return response.choices[0].message.content.strip()
             
