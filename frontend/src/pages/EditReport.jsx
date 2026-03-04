@@ -1366,100 +1366,153 @@ function EditReport() {
         </div>
       )}
 
-      {/* Ask AI Sidebar */}
+      {/* Ask AI Sidebar - ChatGPT Style */}
       {showAskAI && (
-        <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl border-l-2 border-purple-200 z-50 flex flex-col">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5" />
-              <h3 className="font-semibold">Ask AI</h3>
+        <div className="fixed right-0 top-0 h-full w-[440px] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col">
+          {/* Header - Clean like ChatGPT */}
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-gray-700" />
+                <h3 className="font-semibold text-gray-900">Chat</h3>
+              </div>
+              <span className="px-2 py-0.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[10px] font-semibold rounded-full">
+                GPT-4
+              </span>
             </div>
-            <button
-              onClick={() => setShowAskAI(false)}
-              className="text-white hover:text-purple-200 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {aiChatHistory.length > 0 && (
+                <button
+                  onClick={() => setAiChatHistory([])}
+                  className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+                >
+                  New chat
+                </button>
+              )}
+              <button
+                onClick={() => setShowAskAI(false)}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          {/* Selected Text Display */}
-          <div className="p-4 bg-purple-50 border-b border-purple-200">
-            <p className="text-xs font-semibold text-purple-700 mb-1">Selected Text:</p>
-            <p className="text-sm text-gray-800 italic">"{selectedTextForAI}"</p>
-          </div>
-
-          {/* Chat History */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Chat Messages - ChatGPT Style */}
+          <div className="flex-1 overflow-y-auto">
             {aiChatHistory.length === 0 && !loadingAIAnswer && (
-              <div className="text-center text-gray-500 text-sm mt-8">
-                <Sparkles className="w-12 h-12 mx-auto mb-3 text-purple-300" />
-                <p>Ask me anything about the selected text!</p>
-                <p className="text-xs mt-2">e.g., "Does this sound professional?" or "How can I improve this?"</p>
+              <div className="flex flex-col items-center justify-center h-full px-8 text-center">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center justify-center mb-4">
+                  <Sparkles className="w-7 h-7 text-white" />
+                </div>
+                <p className="text-lg font-medium text-gray-900 mb-2">Ask me about your report</p>
+                <p className="text-sm text-gray-500 max-w-sm">
+                  I can help you improve your writing, check grammar, suggest rewording, or answer any questions.
+                </p>
+                <div className="mt-6 space-y-2 w-full max-w-sm">
+                  <button
+                    onClick={() => setCurrentAIQuestion("Does this sound professional?")}
+                    className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-gray-700 border border-gray-200 transition-colors"
+                  >
+                    Does this sound professional?
+                  </button>
+                  <button
+                    onClick={() => setCurrentAIQuestion("How can I make this clearer?")}
+                    className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-gray-700 border border-gray-200 transition-colors"
+                  >
+                    How can I make this clearer?
+                  </button>
+                  <button
+                    onClick={() => setCurrentAIQuestion("Is the tone appropriate for parents?")}
+                    className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-gray-700 border border-gray-200 transition-colors"
+                  >
+                    Is the tone appropriate for parents?
+                  </button>
+                </div>
               </div>
             )}
             
-            {aiChatHistory.map((chat, idx) => (
-              <div key={idx} className="space-y-2">
-                {/* User Question */}
-                <div className="flex justify-end">
-                  <div className="bg-purple-600 text-white rounded-lg px-4 py-2 max-w-[85%]">
-                    <p className="text-sm">{chat.question}</p>
+            {/* Message Thread */}
+            {aiChatHistory.length > 0 && (
+              <div className="py-6">
+                {aiChatHistory.map((chat, idx) => (
+                  <div key={idx}>
+                    {/* User Message */}
+                    <div className="px-6 py-6 bg-white">
+                      <div className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold">
+                          E
+                        </div>
+                        <div className="flex-1 pt-1">
+                          <p className="text-[15px] text-gray-900 leading-relaxed">{chat.question}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* AI Response */}
+                    {chat.answer && (
+                      <div className="px-6 py-6 bg-gray-50">
+                        <div className="flex gap-3">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1 pt-1">
+                            <p className="text-[15px] text-gray-900 leading-relaxed whitespace-pre-wrap">{chat.answer}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                ))}
                 
-                {/* AI Answer */}
-                {chat.answer && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-100 text-gray-800 rounded-lg px-4 py-2 max-w-[85%]">
-                      <p className="text-sm whitespace-pre-wrap">{chat.answer}</p>
+                {/* Loading State */}
+                {loadingAIAnswer && aiChatHistory[aiChatHistory.length - 1]?.answer === null && (
+                  <div className="px-6 py-6 bg-gray-50">
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                        <Sparkles className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex-1 pt-1">
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
-              </div>
-            ))}
-            
-            {loadingAIAnswer && aiChatHistory[aiChatHistory.length - 1]?.answer === null && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 text-gray-600 rounded-lg px-4 py-2">
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
-                    <p className="text-sm">Thinking...</p>
-                  </div>
-                </div>
               </div>
             )}
             
             <div ref={aiChatEndRef} />
           </div>
 
-          {/* Input Area */}
-          <div className="p-4 border-t border-gray-200 bg-gray-50">
-            <div className="flex gap-2">
+          {/* Input Area - ChatGPT Style */}
+          <div className="p-4 bg-white border-t border-gray-200">
+            <div className="relative">
               <input
                 type="text"
                 value={currentAIQuestion}
                 onChange={(e) => setCurrentAIQuestion(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAskAI()}
-                placeholder="Ask a question..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleAskAI()}
+                placeholder="Message ChatGPT..."
+                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent text-[15px] shadow-sm resize-none"
+                style={{ minHeight: '48px' }}
               />
               <button
                 onClick={handleAskAI}
                 disabled={!currentAIQuestion.trim() || loadingAIAnswer}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-900"
               >
                 <Send className="w-4 h-4" />
               </button>
             </div>
-            {aiChatHistory.length > 0 && (
-              <button
-                onClick={() => setAiChatHistory([])}
-                className="mt-2 text-xs text-gray-600 hover:text-gray-800"
-              >
-                Clear Chat
-              </button>
-            )}
+            <p className="mt-2 text-[11px] text-center text-gray-400">
+              Powered by GPT-4 • Full conversation context
+            </p>
           </div>
         </div>
       )}
