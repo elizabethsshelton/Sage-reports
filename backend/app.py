@@ -616,9 +616,10 @@ def polish_full_report(report_id):
 
 
 @app.route('/api/reports/<int:report_id>/expand-report', methods=['POST'])
-def expand_report(report_id):
+def expand_report_endpoint(report_id):
     """Expand a report with more detail using base GPT-4o"""
     data = request.json
+    session_db = get_session(DB_PATH)
     
     try:
         report_text = data.get('report_text', '')
@@ -627,10 +628,10 @@ def expand_report(report_id):
             return jsonify({'error': 'No report text provided'}), 400
         
         # Get previous reports for style reference (optional)
-        report = Report.query.get(report_id)
+        report = session_db.query(Report).filter(Report.id == report_id).first()
         previous_reports = []
         if report and report.student_id:
-            prev_reports = Report.query.filter(
+            prev_reports = session_db.query(Report).filter(
                 Report.student_id == report.student_id,
                 Report.id != report_id,
                 Report.final_report.isnot(None)
@@ -640,6 +641,9 @@ def expand_report(report_id):
         expanded_text = ai_service.expand_report(report_text, previous_reports)
         return jsonify({'expanded_text': expanded_text}), 200
     except Exception as e:
+        print(f"Error in expand_report endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 400
 
 
