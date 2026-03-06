@@ -317,8 +317,8 @@ function EditReport() {
         return
       }
       
-      // Store both clean text and marked text for highlighting
-      setExpandedVersion(result.expanded_text || result.marked_text || '')
+      // Store clean text for final use and marked text for highlighting
+      setExpandedVersion(result)
       setShowExpandComparison(true)
       console.log('✨ Report expanded successfully')
       console.log('Additions:', result.additions)
@@ -330,8 +330,56 @@ function EditReport() {
     }
   }
 
+  const renderExpandedWithHighlights = (markedText) => {
+    // Parse [[ADDED: ...]] markers and render with green highlighting
+    const parts = []
+    let lastIndex = 0
+    const regex = /\[\[ADDED:\s*(.*?)\s*\]\]/g
+    let match
+    
+    while ((match = regex.exec(markedText)) !== null) {
+      // Add text before the marker
+      if (match.index > lastIndex) {
+        parts.push({
+          text: markedText.substring(lastIndex, match.index),
+          isNew: false
+        })
+      }
+      
+      // Add the marked content (new addition)
+      parts.push({
+        text: match[1],
+        isNew: true
+      })
+      
+      lastIndex = regex.lastIndex
+    }
+    
+    // Add remaining text after last marker
+    if (lastIndex < markedText.length) {
+      parts.push({
+        text: markedText.substring(lastIndex),
+        isNew: false
+      })
+    }
+    
+    return (
+      <>
+        {parts.map((part, idx) => (
+          part.isNew ? (
+            <span key={idx} className="bg-emerald-200 text-gray-900">{part.text}</span>
+          ) : (
+            <span key={idx}>{part.text}</span>
+          )
+        ))}
+      </>
+    )
+  }
+
   const handleAcceptExpand = () => {
-    setEditedReport(expandedVersion)
+    // Use clean text without markers
+    const cleanText = expandedVersion.expanded_text || expandedVersion
+    setEditedReport(cleanText)
     setShowExpandComparison(false)
     setExpandedVersion('')
     setOriginalBeforeExpand('')
@@ -1264,10 +1312,25 @@ function EditReport() {
               
               {/* Expanded */}
               <div className="flex flex-col">
-                <h4 className="text-sm font-semibold text-emerald-700 mb-3">Expanded (More Detail)</h4>
-                <div className="flex-1 overflow-y-auto bg-emerald-50 p-4 rounded-lg border border-emerald-200">
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{expandedVersion}</p>
+                <h4 className="text-sm font-semibold text-emerald-700 mb-3 flex items-center gap-2">
+                  Expanded (More Detail)
+                  <span className="text-xs font-normal text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded">
+                    New additions highlighted
+                  </span>
+                </h4>
+                <div className="flex-1 overflow-y-auto bg-white p-4 rounded-lg border border-emerald-200">
+                  <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                    {expandedVersion.marked_text ? 
+                      renderExpandedWithHighlights(expandedVersion.marked_text) : 
+                      expandedVersion.expanded_text || expandedVersion
+                    }
+                  </div>
                 </div>
+                {expandedVersion.additions && expandedVersion.additions.length > 0 && (
+                  <p className="mt-2 text-xs text-emerald-600">
+                    ✨ {expandedVersion.additions.length} new section{expandedVersion.additions.length > 1 ? 's' : ''} added
+                  </p>
+                )}
               </div>
             </div>
             
