@@ -131,13 +131,6 @@ export const addContactToReport = async (reportId) => {
   return response.data
 }
 
-export const suggestOpeningClosing = async (reportId, sentenceType) => {
-  const response = await api.post(`/reports/${reportId}/suggest-opening-closing`, { 
-    type: sentenceType  // 'opening' or 'closing'
-  })
-  return response.data
-}
-
 export const askAIAboutText = async (reportId, selectedText, question, fullReport, conversationHistory = []) => {
   const response = await api.post(`/reports/${reportId}/ask-ai`, {
     selected_text: selectedText,
