@@ -317,9 +317,11 @@ function EditReport() {
         return
       }
       
-      setExpandedVersion(result.expanded_text)
+      // Store both clean text and marked text for highlighting
+      setExpandedVersion(result.expanded_text || result.marked_text || '')
       setShowExpandComparison(true)
       console.log('✨ Report expanded successfully')
+      console.log('Additions:', result.additions)
     } catch (error) {
       console.error('Error expanding report:', error)
       alert('Error expanding report. Please try again.')

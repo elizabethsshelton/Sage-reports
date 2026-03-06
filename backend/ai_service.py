@@ -1062,7 +1062,7 @@ Report to polish:
                 'error': str(e)
             }
     
-    def expand_report(self, report_text: str, previous_reports: List[str] = None) -> str:
+    def expand_report(self, report_text: str, previous_reports: List[str] = None) -> Dict:
         """Expand a report to add more detail and flow while maintaining content accuracy
         
         Uses base GPT-4o (not fine-tuned) to avoid hallucination from domain-specific patterns.
@@ -1098,7 +1098,12 @@ REPORT TO EXPAND:
 
 {report_text}
 
-Expand this report naturally. Make it richer and more detailed, but stay completely faithful to the content above. Do NOT add any new facts, topics, or activities."""
+Expand this report naturally. Make it richer and more detailed, but stay completely faithful to the content above. Do NOT add any new facts, topics, or activities.
+
+IMPORTANT: Mark any NEW sentences or phrases you add (that weren't in the original) by wrapping them with [[ADDED: ... ]]
+For example: "We worked on fractions. [[ADDED: I could see her confidence growing as we tackled more problems.]] She did great."
+
+This helps the tutor see what you added vs what was already there."""
 
         try:
             # Use base GPT-4o (NOT fine-tuned) to avoid domain-specific hallucination patterns
@@ -1113,11 +1118,34 @@ Expand this report naturally. Make it richer and more detailed, but stay complet
             )
             
             expanded_text = response.choices[0].message.content.strip()
-            return expanded_text
+            
+            # Parse out the markers and create display version with highlights
+            display_text = expanded_text
+            additions = []
+            
+            # Extract all [[ADDED: ...]] sections
+            import re
+            pattern = r'\[\[ADDED:\s*(.*?)\s*\]\]'
+            matches = re.finditer(pattern, expanded_text, re.DOTALL)
+            
+            for match in matches:
+                added_content = match.group(1)
+                additions.append(added_content)
+            
+            # Remove markers for clean display but keep the content
+            clean_text = re.sub(pattern, r'\1', expanded_text)
+            
+            return {
+                'expanded_text': clean_text,
+                'additions': additions,
+                'marked_text': expanded_text  # Keep markers for frontend highlighting
+            }
             
         except Exception as e:
             print(f"Error expanding report: {e}")
-            return report_text  # Return original on error
+            import traceback
+            traceback.print_exc()
+            return {'expanded_text': report_text, 'additions': [], 'error': str(e)}
     
     def fix_grammar(self, report_text: str) -> str:
         """Fix grammar and spelling while preserving exact wording and structure"""

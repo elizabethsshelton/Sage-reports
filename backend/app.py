@@ -638,8 +638,8 @@ def expand_report_endpoint(report_id):
             ).order_by(Report.session_date.desc()).limit(3).all()
             previous_reports = [r.final_report for r in prev_reports if r.final_report]
         
-        expanded_text = ai_service.expand_report(report_text, previous_reports)
-        return jsonify({'expanded_text': expanded_text}), 200
+        result = ai_service.expand_report(report_text, previous_reports)
+        return jsonify(result), 200
     except Exception as e:
         print(f"Error in expand_report endpoint: {e}")
         import traceback
