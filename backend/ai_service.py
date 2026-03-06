@@ -1069,22 +1069,31 @@ Report to polish:
         if not self.client:
             return report_text  # Return unchanged if no AI available
         
-        prompt = f"""You are a copy editor. Fix ONLY grammar, spelling, and punctuation errors in this tutoring report.
+        prompt = f"""You are a minimal copy editor. Fix ONLY obvious errors - nothing more.
 
-CRITICAL RULES:
-- Keep the EXACT same wording, structure, and tone
-- Only fix actual errors (grammar, spelling, punctuation)
-- Do NOT rewrite sentences
-- Do NOT change vocabulary or phrasing
-- Do NOT add or remove content
-- Do NOT change the casual/conversational tone
-- Preserve all paragraph breaks and formatting
+WHAT TO FIX (actual errors only):
+✓ Spelling mistakes (e.g., "recieve" → "receive")
+✓ Clear grammar errors (e.g., "she don't" → "she doesn't")
+✓ Wrong verb tenses (e.g., "she go yesterday" → "she went yesterday")
+✓ Missing periods at end of sentences
+✓ Basic capitalization (start of sentences, proper names)
+
+WHAT TO NEVER CHANGE (even if you think it's "better"):
+✗ DO NOT add hyphens to compound words (keep "early stage", "high school", "real world" as-is)
+✗ DO NOT change "pm/am" to "p.m./a.m." (leave informal time as-is)
+✗ DO NOT change informal contractions or casual language
+✗ DO NOT add commas for "style" - only fix clear errors
+✗ DO NOT change word choices or rephrase anything
+✗ DO NOT add or remove any dashes (—, -, etc.)
+✗ DO NOT make it sound more formal or "AI-edited"
+
+PHILOSOPHY: This is a casual tutor writing to parents. Keep their natural voice. Only fix things that are actually WRONG, not things that could be "better styled."
 
 Here is the report:
 
 {report_text}
 
-Return the corrected version with ONLY grammar/spelling/punctuation fixes applied."""
+Return it with ONLY clear errors fixed. When in doubt, don't change it."""
 
         try:
             if self.provider == 'openai':
