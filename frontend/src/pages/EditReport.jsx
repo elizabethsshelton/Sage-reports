@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2, Contact, X, Send, AlertCircle } from 'lucide-react'
-import { getReport, updateReport, deleteReport, getStudents, getReports, fixReportGrammar, suggestSentences, polishText, polishFullReport, generateReport, addContactToReport, askAIAboutText, getSynonyms, reviewPhrases } from '../services/api'
+import { getReport, updateReport, deleteReport, getStudents, getReports, fixReportGrammar, suggestSentences, polishText, polishFullReport, expandReport, generateReport, addContactToReport, askAIAboutText, getSynonyms, reviewPhrases } from '../services/api'
 
 function EditReport() {
   const { id } = useParams()
@@ -60,6 +60,12 @@ function EditReport() {
   const [polishChanges, setPolishChanges] = useState([])
   const [showPolishChanges, setShowPolishChanges] = useState(false)
   const [originalBeforePolish, setOriginalBeforePolish] = useState('')
+  
+  // Expand Report
+  const [loadingExpand, setLoadingExpand] = useState(false)
+  const [originalBeforeExpand, setOriginalBeforeExpand] = useState('')
+  const [expandedVersion, setExpandedVersion] = useState('')
+  const [showExpandComparison, setShowExpandComparison] = useState(false)
   
   // Auto-save
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved') // 'saving', 'saved', 'error'
@@ -295,6 +301,46 @@ function EditReport() {
     setPolishChanges([])
     setOriginalBeforePolish('') // Clear undo history after accepting
     console.log('✅ Accepted polished version')
+  }
+
+  const handleExpandReport = async () => {
+    if (!editedReport) return
+    
+    setLoadingExpand(true)
+    setOriginalBeforeExpand(editedReport)
+    
+    try {
+      const result = await expandReport(id, editedReport)
+      
+      if (result.error) {
+        alert(`Error expanding report: ${result.error}`)
+        return
+      }
+      
+      setExpandedVersion(result.expanded_text)
+      setShowExpandComparison(true)
+      console.log('✨ Report expanded successfully')
+    } catch (error) {
+      console.error('Error expanding report:', error)
+      alert('Error expanding report. Please try again.')
+    } finally {
+      setLoadingExpand(false)
+    }
+  }
+
+  const handleAcceptExpand = () => {
+    setEditedReport(expandedVersion)
+    setShowExpandComparison(false)
+    setExpandedVersion('')
+    setOriginalBeforeExpand('')
+    console.log('✅ Accepted expanded version')
+  }
+
+  const handleRejectExpand = () => {
+    setShowExpandComparison(false)
+    setExpandedVersion('')
+    setOriginalBeforeExpand('')
+    console.log('❌ Rejected expanded version')
   }
 
   const handleFixGrammar = async () => {
@@ -788,7 +834,7 @@ function EditReport() {
               )}
               
               {/* AI Action Buttons */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={handleFixGrammar}
                   disabled={fixingGrammar || saving || regenerating}
@@ -797,6 +843,16 @@ function EditReport() {
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
                   {fixingGrammar ? 'Fixing...' : 'Fix Grammar'}
+                </button>
+
+                <button
+                  onClick={handleExpandReport}
+                  disabled={loadingExpand || saving || regenerating}
+                  className="px-6 py-2.5 bg-emerald-50 text-emerald-700 font-medium rounded-xl hover:bg-emerald-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-emerald-200"
+                  title="Add more detail and flow using GPT-4o (stays faithful to your content)"
+                >
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  {loadingExpand ? 'Expanding...' : 'Expand Report'}
                 </button>
 
                 <button
@@ -818,7 +874,9 @@ function EditReport() {
                   <RefreshCw className={`w-4 h-4 mr-2 ${regenerating ? 'animate-spin' : ''}`} />
                   {regenerating ? 'Regenerating...' : 'Regenerate Report'}
                 </button>
-
+              </div>
+              
+              <div className="grid grid-cols-1 gap-3">
                 <button
                   onClick={handleAddContact}
                   disabled={addingContact || saving}
@@ -1169,6 +1227,63 @@ function EditReport() {
                 <p className="text-xs mt-2">The report was polished successfully</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Expand Report Comparison Modal */}
+      {showExpandComparison && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Wand2 className="w-5 h-5 text-emerald-600" />
+                  Expanded Version
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">Compare original (left) with expanded version (right)</p>
+              </div>
+              <button
+                onClick={handleRejectExpand}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-hidden grid grid-cols-2 gap-4 p-6">
+              {/* Original */}
+              <div className="flex flex-col">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Original (Shorter)</h4>
+                <div className="flex-1 overflow-y-auto bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{originalBeforeExpand}</p>
+                </div>
+              </div>
+              
+              {/* Expanded */}
+              <div className="flex flex-col">
+                <h4 className="text-sm font-semibold text-emerald-700 mb-3">Expanded (More Detail)</h4>
+                <div className="flex-1 overflow-y-auto bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{expandedVersion}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={handleRejectExpand}
+                className="px-6 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                Keep Original
+              </button>
+              <button
+                onClick={handleAcceptExpand}
+                className="px-6 py-2.5 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-700 transition-colors flex items-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Use Expanded Version
+              </button>
+            </div>
           </div>
         </div>
       )}

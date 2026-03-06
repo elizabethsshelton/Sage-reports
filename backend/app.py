@@ -615,6 +615,34 @@ def polish_full_report(report_id):
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/api/reports/<int:report_id>/expand-report', methods=['POST'])
+def expand_report(report_id):
+    """Expand a report with more detail using base GPT-4o"""
+    data = request.json
+    
+    try:
+        report_text = data.get('report_text', '')
+        
+        if not report_text:
+            return jsonify({'error': 'No report text provided'}), 400
+        
+        # Get previous reports for style reference (optional)
+        report = Report.query.get(report_id)
+        previous_reports = []
+        if report and report.student_id:
+            prev_reports = Report.query.filter(
+                Report.student_id == report.student_id,
+                Report.id != report_id,
+                Report.final_report.isnot(None)
+            ).order_by(Report.session_date.desc()).limit(3).all()
+            previous_reports = [r.final_report for r in prev_reports if r.final_report]
+        
+        expanded_text = ai_service.expand_report(report_text, previous_reports)
+        return jsonify({'expanded_text': expanded_text}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
 @app.route('/api/reports/<int:report_id>/ask-ai', methods=['POST'])
 def ask_ai_about_text(report_id):
     """Ask AI questions about selected text"""

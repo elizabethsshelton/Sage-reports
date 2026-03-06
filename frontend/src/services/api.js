@@ -126,6 +126,13 @@ export const polishFullReport = async (reportId, reportText) => {
   return response.data
 }
 
+export const expandReport = async (reportId, reportText) => {
+  const response = await api.post(`/reports/${reportId}/expand-report`, { 
+    report_text: reportText
+  })
+  return response.data
+}
+
 export const addContactToReport = async (reportId) => {
   const response = await api.post(`/reports/${reportId}/add-contact`)
   return response.data

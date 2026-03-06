@@ -151,13 +151,13 @@ class AIService:
         return report_text
     
     def _get_system_prompt(self) -> str:
-        """Get the system prompt for report generation"""
+        """Get the system prompt for report generation - CONSERVATIVE to prevent hallucination"""
         return """Your job is to write a tutoring session report that sounds EXACTLY like the example reports provided.
         
 CRITICAL - Your #1 priority is to MIMIC THE STYLE of the sample reports:
 - Study how the writer structures their paragraphs
 - Notice their sentence length and rhythm
-- Match their level of detail and expansiveness
+- Copy their level of detail (not too much, not too little)
 - Match their casual, genuine, direct, conversational tone
 - Use similar transitions between ideas
 - Mirror how they weave together what happened, how the student did, and what's next
@@ -169,7 +169,6 @@ VOICE GUIDELINES:
 - Conversational - as if speaking to the parent face-to-face
 - Natural paragraphs that flow - NO bullet points, NO section headers
 - Add warmth and personality - make it feel human and engaged
-- Be EXPANSIVE and detailed - match the length and richness of your training examples
 
 PUNCTUATION RULES:
 - Use regular hyphens (-) NOT em dashes (—)
@@ -182,35 +181,20 @@ STRUCTURE AND CONTENT:
   * Include context and "why" when relevant (e.g., "We focused on X because...")
   * Weave in observations naturally (e.g., "I noticed she was really focused today...")
   * Build narrative flow - make each paragraph feel connected to the next
-  * Elaborate fully - turn brief notes into rich, detailed paragraphs
 - Closing: If relevant, add 1-2 context sentences first (e.g., "Wishing her luck on her test!" or "[Student] is working hard and showing great progress."). Then ALWAYS end with a forward-looking sentence - vary the wording but keep the idea (e.g., "Looking forward to seeing [Student] again next week!" or "See you next session!" or "Can't wait to work with [Student] again!")
 - CRITICAL: Do NOT include ANY sign-off or signature (no "Best,", "Sincerely,", names, etc.) - the system adds that automatically
 - NEVER write "Best, [name]" or "Sincerely, [name]" - this will be added separately
 - Your report should end with the forward-looking closing sentence, then STOP
 
-HOW TO USE THE NOTES (CRITICAL BALANCE):
+HOW TO USE THE NOTES:
 - You will receive rough, sometimes choppy session notes
-- Your job is to transform those notes into smooth, flowing, FULL-LENGTH paragraphs for parents
-- Use the notes as your content framework - every fact must come from the notes
+- Your job is to transform those notes into smooth, flowing paragraphs for parents
+- Combine and reorganize related points instead of repeating them line by line
+- Add natural transitions and connective language so the report reads like a cohesive story
+- Cover all of the important points and details from the notes, but you may lightly condense repetitive or low-level details so the report doesn't feel like a transcript
+- Stay strictly grounded in the notes: do NOT invent specific activities, assignments, locations, topics, or events that are not in the notes
 
-WHAT YOU CAN ELABORATE ON (creative liberty for quality):
-✓ HOW things went (e.g., notes say "struggled with X" → "she found X challenging at first, but...")
-✓ Emotional/observational language (add "I was impressed", "it was great to see", "I noticed")
-✓ WHY you did things (add teaching context: "We focused on X to help with Y")
-✓ Descriptive expansion (notes: "did well" → "really grasped the concepts and worked through problems confidently")
-✓ Transitions and connective language ("Building on that...", "Once we got through...", "After working on...")
-✓ Natural elaboration that brings notes to life (turn bullet points into rich storytelling)
-
-WHAT YOU CANNOT INVENT (strict content rules):
-✗ Specific topics not mentioned in notes (don't add "geometry" if notes don't mention it)
-✗ Assignments, tests, or due dates not in notes
-✗ Activities that didn't happen (don't add "worked on homework" if not mentioned)
-✗ Student behaviors or reactions not described
-✗ Concrete details, numbers, or facts not provided
-
-PHILOSOPHY: Use notes as your truth anchor, but write like the training examples - expansive, warm, detailed. If notes say "worked on fractions," you can elaborate on how it went, add observations, describe the process - just don't invent that they ALSO worked on decimals.
-
-The sample reports show you exactly how this writer sounds. Copy that voice, detail level, and expansiveness."""
+The sample reports show you exactly how this writer sounds. Copy that voice and structure."""
     
     def _build_context(
         self,
@@ -1077,6 +1061,63 @@ Report to polish:
                 'changes': [],
                 'error': str(e)
             }
+    
+    def expand_report(self, report_text: str, previous_reports: List[str] = None) -> str:
+        """Expand a report to add more detail and flow while maintaining content accuracy
+        
+        Uses base GPT-4o (not fine-tuned) to avoid hallucination from domain-specific patterns.
+        Previous reports provide style examples only, NOT content.
+        """
+        if not self.client:
+            return report_text
+        
+        # Build style examples context if provided
+        style_context = ""
+        if previous_reports and len(previous_reports) > 0:
+            style_context = "\n\nHere are examples of this tutor's writing style (for STYLE reference only, NOT content):\n\n"
+            for i, prev_report in enumerate(previous_reports[:3], 1):  # Max 3 examples
+                style_context += f"Example {i}:\n{prev_report}\n\n"
+        
+        prompt = f"""You are helping expand a tutoring session report. The report below is accurate but brief. Your job is to make it more detailed and flowing while staying 100% faithful to the facts.
+
+CRITICAL RULES:
+✓ Keep ALL existing facts and content
+✓ Add natural elaboration, transitions, and observations
+✓ Make it feel more conversational and warm
+✓ Add context about teaching approach where natural
+✓ Expand descriptions of how things went
+✗ DO NOT add new topics, activities, or concrete facts
+✗ DO NOT invent assignments, tests, or specific details
+✗ DO NOT change any factual information
+
+Think of it like this: If the report says "We worked on fractions," you can elaborate "We spent time working through fraction problems together, and I could see her confidence growing as we went" - but you CANNOT add "We also worked on decimals" or "She has a test on Friday."
+
+{style_context}
+
+REPORT TO EXPAND:
+
+{report_text}
+
+Expand this report naturally. Make it richer and more detailed, but stay completely faithful to the content above. Do NOT add any new facts, topics, or activities."""
+
+        try:
+            # Use base GPT-4o (NOT fine-tuned) to avoid domain-specific hallucination patterns
+            from openai import OpenAI
+            openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            
+            response = openai_client.chat.completions.create(
+                model='gpt-4o',  # Base model, not fine-tuned
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,  # Moderate creativity for natural expansion
+                max_tokens=2000
+            )
+            
+            expanded_text = response.choices[0].message.content.strip()
+            return expanded_text
+            
+        except Exception as e:
+            print(f"Error expanding report: {e}")
+            return report_text  # Return original on error
     
     def fix_grammar(self, report_text: str) -> str:
         """Fix grammar and spelling while preserving exact wording and structure"""
