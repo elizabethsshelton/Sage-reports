@@ -449,97 +449,8 @@ function EditReport() {
     }
   }
 
-  const handleLoadOpeningClosingSuggestions = async (type) => {
-    const isOpening = type === 'opening'
-    const setLoading = isOpening ? setLoadingOpeningSuggestions : setLoadingClosingSuggestions
-    const setSuggestions = isOpening ? setOpeningSuggestions : setClosingSuggestions
-    
-    setLoading(true)
-    try {
-      const result = await suggestOpeningClosing(id, type)
-      setSuggestions(result.suggestions || [])
-      if (isOpening) {
-        setCurrentOpening(result.current_sentence || '')
-        setPreviousOpening(result.previous_sentence || '')
-      } else {
-        setCurrentClosing(result.current_sentence || '')
-        setPreviousClosing(result.previous_sentence || '')
-      }
-    } catch (error) {
-      console.error(`Error loading ${type} suggestions:`, error)
-      alert(`Error loading suggestions. Please try again.`)
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  const handleApplyOpeningClosing = (newSentence, type) => {
-    const isOpening = type === 'opening'
-    
-    // Save original if this is the first change
-    if (isOpening && !hasChangedOpening) {
-      const firstPeriodIndex = editedReport.indexOf('.')
-      if (firstPeriodIndex !== -1) {
-        const original = editedReport.substring(0, firstPeriodIndex + 1).trim()
-        setOriginalOpening(original)
-        setHasChangedOpening(true)
-      }
-    } else if (!isOpening && !hasChangedClosing) {
-      const sentences = editedReport.trim().split('.')
-      if (sentences.length > 1) {
-        const original = sentences[sentences.length - 2].trim() + '.'
-        setOriginalClosing(original)
-        setHasChangedClosing(true)
-      }
-    }
-    
-    // Find and replace the first or last sentence
-    if (isOpening) {
-      // Replace opening sentence
-      const firstPeriodIndex = editedReport.indexOf('.')
-      if (firstPeriodIndex !== -1) {
-        const newReport = newSentence + editedReport.substring(firstPeriodIndex + 1)
-        setEditedReport(newReport)
-        setCurrentOpening(newSentence)
-      }
-    } else {
-      // Replace closing sentence
-      const sentences = editedReport.trim().split('.')
-      if (sentences.length > 1) {
-        sentences[sentences.length - 2] = ' ' + newSentence.replace(/\.$/, '')
-        const newReport = sentences.join('.')
-        setEditedReport(newReport)
-        setCurrentClosing(newSentence)
-      }
-    }
-  }
 
-  const handleUndoOpeningClosing = (type) => {
-    const isOpening = type === 'opening'
-    
-    if (isOpening && originalOpening) {
-      // Restore original opening
-      const firstPeriodIndex = editedReport.indexOf('.')
-      if (firstPeriodIndex !== -1) {
-        const newReport = originalOpening + editedReport.substring(firstPeriodIndex + 1)
-        setEditedReport(newReport)
-        setCurrentOpening(originalOpening)
-        setHasChangedOpening(false)
-        setOriginalOpening('')
-      }
-    } else if (!isOpening && originalClosing) {
-      // Restore original closing
-      const sentences = editedReport.trim().split('.')
-      if (sentences.length > 1) {
-        sentences[sentences.length - 2] = ' ' + originalClosing.replace(/\.$/, '')
-        const newReport = sentences.join('.')
-        setEditedReport(newReport)
-        setCurrentClosing(originalClosing)
-        setHasChangedClosing(false)
-        setOriginalClosing('')
-      }
-    }
-  }
 
   const handleCopy = () => {
     navigator.clipboard.writeText(editedReport)
@@ -848,85 +759,6 @@ function EditReport() {
                 </div>
               </div>
             )}
-
-            {/* Closing Sentence Tool */}
-            <div className="mt-4 border border-rose-200 rounded-lg bg-rose-50">
-              <button
-                onClick={() => {
-                  setShowClosingTool(!showClosingTool)
-                  if (!showClosingTool && closingSuggestions.length === 0) {
-                    handleLoadOpeningClosingSuggestions('closing')
-                  }
-                }}
-                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-rose-100 transition-colors rounded-lg"
-              >
-                <span className="text-sm font-semibold text-rose-900">✨ Change Closing Sentence</span>
-                {showClosingTool ? <ChevronUp className="w-4 h-4 text-rose-700" /> : <ChevronDown className="w-4 h-4 text-rose-700" />}
-              </button>
-              
-              {showClosingTool && (
-                <div className="px-4 pb-4 space-y-3">
-                  {currentClosing && (
-                    <div className="bg-white border border-rose-200 rounded-lg p-3">
-                      <p className="text-xs font-semibold text-rose-700 mb-1">Current Closing:</p>
-                      <p className="text-sm text-sage-800">{currentClosing}</p>
-                    </div>
-                  )}
-                  
-                  {previousClosing && (
-                    <div className="bg-white border border-gray-200 rounded-lg p-3">
-                      <p className="text-xs font-semibold text-gray-600 mb-1">Previous Report Used:</p>
-                      <p className="text-sm text-gray-700">{previousClosing}</p>
-                    </div>
-                  )}
-                  
-                  {loadingClosingSuggestions ? (
-                    <div className="text-center py-4">
-                      <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-rose-600"></div>
-                      <p className="text-sm text-rose-600 mt-2">Generating suggestions...</p>
-                    </div>
-                  ) : closingSuggestions.length > 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-rose-700">Try These:</p>
-                      {closingSuggestions.map((suggestion, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleApplyOpeningClosing(suggestion, 'closing')}
-                          className="w-full text-left px-3 py-2 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 hover:border-rose-300 transition-colors text-sm"
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleLoadOpeningClosingSuggestions('closing')}
-                          className="flex-1 text-center px-3 py-2 bg-rose-100 border border-rose-300 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium text-rose-700"
-                        >
-                          🔄 Generate New Options
-                        </button>
-                        {hasChangedClosing && (
-                          <button
-                            onClick={() => handleUndoOpeningClosing('closing')}
-                            className="px-4 py-2 bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors text-sm font-medium text-amber-700"
-                            title="Restore original closing sentence"
-                          >
-                            ↩️ Undo
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleLoadOpeningClosingSuggestions('closing')}
-                      className="w-full px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors text-sm font-medium"
-                    >
-                      Generate Suggestions
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
             <div className="mt-4 space-y-3">
               {selectedText && (
                 <div className="flex justify-end gap-2 animate-fade-in">
@@ -1124,6 +956,43 @@ function EditReport() {
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
+
+
+          {/* Previous Report Viewer */}
+          {previousReport && (
+            <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-4">
+              <button
+                onClick={() => setShowPreviousReport(!showPreviousReport)}
+                className="w-full flex items-center justify-between mb-3 text-sage-800 font-semibold hover:text-sage-900"
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Previous Report ({new Date(previousReport.session_date).toLocaleDateString()})
+                </span>
+                {showPreviousReport ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showPreviousReport && (
+                <div className="mt-3 max-h-96 overflow-y-auto">
+                  <div className="text-xs text-sage-700 bg-sage-50 p-3 rounded border border-sage-200 whitespace-pre-wrap leading-relaxed">
+                    {previousReport.final_report || previousReport.ai_generated_report}
+                  </div>
+                  <p className="mt-2 text-[10px] text-gray-500">
+                    Compare with your previous report to maintain consistency
+                  </p>
+                </div>
+              )}
+              
+              {loadingPreviousReport && (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-sage-600 mx-auto"></div>
+                  <p className="text-xs text-sage-500 mt-2">Loading previous report...</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Session Notes */}
           <div className="bg-white rounded-lg shadow-sm border border-sage-200 p-4">
