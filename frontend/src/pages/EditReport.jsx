@@ -649,7 +649,7 @@ function EditReport() {
     }
   }
 
-  const handleUndo = () => {
+  const handleUndoPolishSelection = () => {
     if (undoStack.length === 0) return
     
     // Get the last saved state
@@ -1043,7 +1043,7 @@ function EditReport() {
               {showUndoButton && undoStack.length > 0 && (
                 <div className="flex justify-end animate-fade-in">
                   <button
-                    onClick={handleUndo}
+                    onClick={handleUndoPolishSelection}
                     disabled={polishing || saving}
                     className="px-5 py-2 bg-amber-50 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 flex items-center border-2 border-amber-200"
                     title={`Undo last ${undoStack.length} polish${undoStack.length > 1 ? 'es' : ''}`}
