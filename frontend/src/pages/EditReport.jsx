@@ -65,6 +65,7 @@ function EditReport() {
   const [loadingExpand, setLoadingExpand] = useState(false)
   const [originalBeforeExpand, setOriginalBeforeExpand] = useState('')
   const [expandedVersion, setExpandedVersion] = useState('')
+  const [editableExpandedText, setEditableExpandedText] = useState('')
   const [showExpandComparison, setShowExpandComparison] = useState(false)
   const [expandingSectionOnly, setExpandingSectionOnly] = useState(false)
   const [sectionPosition, setSectionPosition] = useState({ start: 0, end: 0 })
@@ -341,6 +342,7 @@ function EditReport() {
       
       // Store the result and whether we're expanding a section
       setExpandedVersion(result)
+      setEditableExpandedText(result.expanded_text || result) // Set editable version to clean text
       setExpandingSectionOnly(isExpandingSection)
       setSectionPosition({ start: selectionStart, end: selectionEnd })
       setShowExpandComparison(true)
@@ -401,24 +403,25 @@ function EditReport() {
   }
 
   const handleAcceptExpand = () => {
-    // Use clean text without markers
-    const cleanText = expandedVersion.expanded_text || expandedVersion
+    // Use the editable text (user may have tweaked it)
+    const finalText = editableExpandedText
     
     if (expandingSectionOnly) {
       // Splice the expanded section back into the original report
       const before = originalBeforeExpand.substring(0, sectionPosition.start)
       const after = originalBeforeExpand.substring(sectionPosition.end)
-      const newReport = before + cleanText + after
+      const newReport = before + finalText + after
       setEditedReport(newReport)
       console.log('✅ Accepted expanded section')
     } else {
       // Replace entire report
-      setEditedReport(cleanText)
+      setEditedReport(finalText)
       console.log('✅ Accepted expanded report')
     }
     
     setShowExpandComparison(false)
     setExpandedVersion('')
+    setEditableExpandedText('')
     setOriginalBeforeExpand('')
     setExpandingSectionOnly(false)
     setSectionPosition({ start: 0, end: 0 })
@@ -427,7 +430,10 @@ function EditReport() {
   const handleRejectExpand = () => {
     setShowExpandComparison(false)
     setExpandedVersion('')
+    setEditableExpandedText('')
     setOriginalBeforeExpand('')
+    setExpandingSectionOnly(false)
+    setSectionPosition({ start: 0, end: 0 })
     console.log('❌ Rejected expanded version')
   }
 
@@ -1357,25 +1363,23 @@ function EditReport() {
                 </div>
               </div>
               
-              {/* Expanded */}
+              {/* Expanded - Editable */}
               <div className="flex flex-col">
                 <h4 className="text-sm font-semibold text-emerald-700 mb-3 flex items-center gap-2">
-                  Expanded (More Detail)
+                  Expanded (More Detail) - Editable
                   <span className="text-xs font-normal text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded">
-                    New additions highlighted
+                    ✏️ Edit before accepting
                   </span>
                 </h4>
-                <div className="flex-1 overflow-y-auto bg-white p-4 rounded-lg border border-emerald-200">
-                  <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                    {expandedVersion.marked_text ? 
-                      renderExpandedWithHighlights(expandedVersion.marked_text) : 
-                      expandedVersion.expanded_text || expandedVersion
-                    }
-                  </div>
-                </div>
+                <textarea
+                  value={editableExpandedText}
+                  onChange={(e) => setEditableExpandedText(e.target.value)}
+                  className="flex-1 bg-white p-4 rounded-lg border-2 border-emerald-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm text-gray-800 leading-relaxed resize-none"
+                  placeholder="Edit the expanded version..."
+                />
                 {expandedVersion.additions && expandedVersion.additions.length > 0 && (
                   <p className="mt-2 text-xs text-emerald-600">
-                    ✨ {expandedVersion.additions.length} new section{expandedVersion.additions.length > 1 ? 's' : ''} added
+                    ✨ {expandedVersion.additions.length} new section{expandedVersion.additions.length > 1 ? 's' : ''} added (you can edit above)
                   </p>
                 )}
               </div>
