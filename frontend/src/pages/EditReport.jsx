@@ -66,6 +66,8 @@ function EditReport() {
   const [originalBeforeExpand, setOriginalBeforeExpand] = useState('')
   const [expandedVersion, setExpandedVersion] = useState('')
   const [showExpandComparison, setShowExpandComparison] = useState(false)
+  const [expandingSectionOnly, setExpandingSectionOnly] = useState(false)
+  const [sectionPosition, setSectionPosition] = useState({ start: 0, end: 0 })
   
   // Auto-save
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved') // 'saving', 'saved', 'error'
@@ -306,25 +308,47 @@ function EditReport() {
   const handleExpandReport = async () => {
     if (!editedReport) return
     
+    // Check if user has text selected
+    const textarea = textareaRef.current
+    const hasSelection = textarea && textarea.selectionStart !== textarea.selectionEnd
+    
     setLoadingExpand(true)
     setOriginalBeforeExpand(editedReport)
     
     try {
-      const result = await expandReport(id, editedReport)
+      let textToExpand = editedReport
+      let isExpandingSection = false
+      let selectionStart = 0
+      let selectionEnd = 0
+      
+      if (hasSelection) {
+        // Expand only the selected section
+        selectionStart = textarea.selectionStart
+        selectionEnd = textarea.selectionEnd
+        textToExpand = editedReport.substring(selectionStart, selectionEnd)
+        isExpandingSection = true
+        console.log('📝 Expanding selected section:', textToExpand.substring(0, 50) + '...')
+      } else {
+        console.log('📄 Expanding full report')
+      }
+      
+      const result = await expandReport(id, textToExpand)
       
       if (result.error) {
-        alert(`Error expanding report: ${result.error}`)
+        alert(`Error expanding ${isExpandingSection ? 'section' : 'report'}: ${result.error}`)
         return
       }
       
-      // Store clean text for final use and marked text for highlighting
+      // Store the result and whether we're expanding a section
       setExpandedVersion(result)
+      setExpandingSectionOnly(isExpandingSection)
+      setSectionPosition({ start: selectionStart, end: selectionEnd })
       setShowExpandComparison(true)
-      console.log('✨ Report expanded successfully')
+      console.log(`✨ ${isExpandingSection ? 'Section' : 'Report'} expanded successfully`)
       console.log('Additions:', result.additions)
     } catch (error) {
-      console.error('Error expanding report:', error)
-      alert('Error expanding report. Please try again.')
+      console.error('Error expanding:', error)
+      alert('Error expanding. Please try again.')
     } finally {
       setLoadingExpand(false)
     }
@@ -379,11 +403,25 @@ function EditReport() {
   const handleAcceptExpand = () => {
     // Use clean text without markers
     const cleanText = expandedVersion.expanded_text || expandedVersion
-    setEditedReport(cleanText)
+    
+    if (expandingSectionOnly) {
+      // Splice the expanded section back into the original report
+      const before = originalBeforeExpand.substring(0, sectionPosition.start)
+      const after = originalBeforeExpand.substring(sectionPosition.end)
+      const newReport = before + cleanText + after
+      setEditedReport(newReport)
+      console.log('✅ Accepted expanded section')
+    } else {
+      // Replace entire report
+      setEditedReport(cleanText)
+      console.log('✅ Accepted expanded report')
+    }
+    
     setShowExpandComparison(false)
     setExpandedVersion('')
     setOriginalBeforeExpand('')
-    console.log('✅ Accepted expanded version')
+    setExpandingSectionOnly(false)
+    setSectionPosition({ start: 0, end: 0 })
   }
 
   const handleRejectExpand = () => {
@@ -899,10 +937,10 @@ function EditReport() {
                   onClick={handleExpandReport}
                   disabled={loadingExpand || saving || regenerating}
                   className="px-6 py-2.5 bg-emerald-50 text-emerald-700 font-medium rounded-xl hover:bg-emerald-100 transition-smooth hover-lift shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center border-2 border-emerald-200"
-                  title="Add more detail and flow using GPT-4o (stays faithful to your content)"
+                  title={selectedText ? "Expand just the selected section" : "Add more detail and flow using GPT-4o (stays faithful to your content)"}
                 >
                   <Wand2 className="w-4 h-4 mr-2" />
-                  {loadingExpand ? 'Expanding...' : 'Expand Report'}
+                  {loadingExpand ? 'Expanding...' : (selectedText ? 'Expand Section' : 'Expand Report')}
                 </button>
 
                 <button
@@ -1289,9 +1327,11 @@ function EditReport() {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <Wand2 className="w-5 h-5 text-emerald-600" />
-                  Expanded Version
+                  Expanded {expandingSectionOnly ? 'Section' : 'Version'}
                 </h3>
-                <p className="text-sm text-gray-500 mt-1">Compare original (left) with expanded version (right)</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Compare original {expandingSectionOnly ? 'section' : 'report'} (left) with expanded version (right)
+                </p>
               </div>
               <button
                 onClick={handleRejectExpand}
@@ -1304,9 +1344,16 @@ function EditReport() {
             <div className="flex-1 overflow-hidden grid grid-cols-2 gap-4 p-6">
               {/* Original */}
               <div className="flex flex-col">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Original (Shorter)</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                  Original {expandingSectionOnly ? 'Section' : '(Shorter)'}
+                </h4>
                 <div className="flex-1 overflow-y-auto bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{originalBeforeExpand}</p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                    {expandingSectionOnly 
+                      ? originalBeforeExpand.substring(sectionPosition.start, sectionPosition.end)
+                      : originalBeforeExpand
+                    }
+                  </p>
                 </div>
               </div>
               
