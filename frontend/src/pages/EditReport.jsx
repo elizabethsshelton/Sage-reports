@@ -333,7 +333,7 @@ function EditReport() {
         console.log('📄 Expanding full report')
       }
       
-      const result = await expandReport(id, textToExpand)
+      const result = await expandReport(id, textToExpand, isExpandingSection)
       
       if (result.error) {
         alert(`Error expanding ${isExpandingSection ? 'section' : 'report'}: ${result.error}`)

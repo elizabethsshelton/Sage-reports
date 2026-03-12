@@ -126,9 +126,10 @@ export const polishFullReport = async (reportId, reportText) => {
   return response.data
 }
 
-export const expandReport = async (reportId, reportText) => {
-  const response = await api.post(`/reports/${reportId}/expand-report`, { 
-    report_text: reportText
+export const expandReport = async (reportId, reportText, isSection = false) => {
+  const response = await api.post(`/reports/${reportId}/expand-report`, {
+    report_text: reportText,
+    is_section: isSection
   })
   return response.data
 }

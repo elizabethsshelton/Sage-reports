@@ -620,25 +620,26 @@ def expand_report_endpoint(report_id):
     """Expand a report with more detail using base GPT-4o"""
     data = request.json
     session_db = get_session(DB_PATH)
-    
+
     try:
         report_text = data.get('report_text', '')
-        
+        is_section = data.get('is_section', False)  # Flag to indicate if expanding just a section
+
         if not report_text:
             return jsonify({'error': 'No report text provided'}), 400
-        
-        # Get previous reports for style reference (optional)
+
+        # Get previous reports for style reference (only for full reports, not sections)
         report = session_db.query(Report).filter(Report.id == report_id).first()
         previous_reports = []
-        if report and report.student_id:
+        if not is_section and report and report.student_id:
             prev_reports = session_db.query(Report).filter(
                 Report.student_id == report.student_id,
                 Report.id != report_id,
                 Report.final_report.isnot(None)
             ).order_by(Report.session_date.desc()).limit(3).all()
             previous_reports = [r.final_report for r in prev_reports if r.final_report]
-        
-        result = ai_service.expand_report(report_text, previous_reports)
+
+        result = ai_service.expand_report(report_text, previous_reports, is_section=is_section)
         return jsonify(result), 200
     except Exception as e:
         print(f"Error in expand_report endpoint: {e}")

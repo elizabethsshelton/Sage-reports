@@ -1062,23 +1062,54 @@ Report to polish:
                 'error': str(e)
             }
     
-    def expand_report(self, report_text: str, previous_reports: List[str] = None) -> Dict:
+    def expand_report(self, report_text: str, previous_reports: List[str] = None, is_section: bool = False) -> Dict:
         """Expand a report to add more detail and flow while maintaining content accuracy
         
         Uses base GPT-4o (not fine-tuned) to avoid hallucination from domain-specific patterns.
         Previous reports provide style examples only, NOT content.
+        
+        Args:
+            report_text: The text to expand
+            previous_reports: Previous reports for style reference
+            is_section: If True, expanding just a section (no greeting/sign-off). If False, expanding full report.
         """
         if not self.client:
             return report_text
         
-        # Build style examples context if provided
+        # Build style examples context if provided (only for full reports)
         style_context = ""
-        if previous_reports and len(previous_reports) > 0:
+        if not is_section and previous_reports and len(previous_reports) > 0:
             style_context = "\n\nHere are examples of this tutor's writing style (for STYLE reference only, NOT content):\n\n"
             for i, prev_report in enumerate(previous_reports[:3], 1):  # Max 3 examples
                 style_context += f"Example {i}:\n{prev_report}\n\n"
         
-        prompt = f"""You are helping expand a tutoring session report. The report below is accurate but brief. Your job is to make it more detailed and flowing while staying 100% faithful to the facts.
+        if is_section:
+            # Prompt for expanding a section - no report structure, just content expansion
+            prompt = f"""You are helping expand a SECTION of a tutoring session report. This is NOT a complete report - just a paragraph or section from within a larger report.
+
+CRITICAL RULES:
+✓ Expand ONLY the content provided - add natural elaboration and detail
+✓ DO NOT add greetings like "Hi [parent name]"
+✗ DO NOT add sign-offs like "Best, Elizabeth" 
+✗ DO NOT add report structure elements (dates, headers, etc.)
+✗ DO NOT add new topics or concrete facts not in the original
+✓ Keep the same tone and flow, just make it more detailed
+
+This is a MIDDLE SECTION of a report, not a complete report. Just expand the content itself.
+
+SECTION TO EXPAND:
+
+{report_text}
+
+Expand this section naturally with more detail and flow, but NO greetings or sign-offs.
+
+IMPORTANT: Mark any NEW sentences or phrases you add (that weren't in the original) by wrapping them with [[ADDED: ... ]]
+For example: "We worked on fractions. [[ADDED: I could see her confidence growing as we tackled more problems.]] She did great."
+
+This helps the tutor see what you added vs what was already there."""
+        else:
+            # Prompt for expanding a full report
+            prompt = f"""You are helping expand a tutoring session report. The report below is accurate but brief. Your job is to make it more detailed and flowing while staying 100% faithful to the facts.
 
 CRITICAL RULES:
 ✓ Keep ALL existing facts and content
