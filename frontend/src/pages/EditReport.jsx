@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2, Contact, X, Send, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Save, Copy, Download, CheckCircle, Check, Trash2, Sparkles, RefreshCw, ChevronDown, ChevronUp, Wand2, Undo2, Redo2, Contact, X, Send, AlertCircle } from 'lucide-react'
 import { getReport, updateReport, deleteReport, getStudents, getReports, fixReportGrammar, suggestSentences, polishText, polishFullReport, expandReport, generateReport, addContactToReport, askAIAboutText, getSynonyms, reviewPhrases } from '../services/api'
 
 function EditReport() {
@@ -73,8 +73,15 @@ function EditReport() {
   // Auto-save
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved') // 'saving', 'saved', 'error'
   
+  // Undo/Redo for main editing
+  const [editHistory, setEditHistory] = useState([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const [isUndoRedoAction, setIsUndoRedoAction] = useState(false)
+  
   const textareaRef = useRef(null)
   const aiChatEndRef = useRef(null)
+  const expandedEditableRef = useRef(null)
+  const historyTimerRef = useRef(null)
 
   useEffect(() => {
     loadReport()
@@ -119,6 +126,29 @@ function EditReport() {
     return () => clearTimeout(saveTimer)
   }, [editedReport, id, status, useForTraining, selectedStudentId, sessionDate, nextSessionNotes])
 
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Only handle shortcuts when focused on the textarea
+      if (document.activeElement !== textareaRef.current) return
+
+      // Ctrl+Z or Cmd+Z for undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+      // Ctrl+Y or Cmd+Shift+Z for redo
+      if (((e.ctrlKey || e.metaKey) && e.key === 'y') || 
+          ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z')) {
+        e.preventDefault()
+        handleRedo()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [historyIndex, editHistory])
+
   const loadStudents = async () => {
     try {
       const data = await getStudents(false) // Get all students
@@ -132,7 +162,11 @@ function EditReport() {
     try {
       const data = await getReport(id)
       setReport(data)
-      setEditedReport(data.final_report || data.ai_generated_report || '')
+      const initialReport = data.final_report || data.ai_generated_report || ''
+      setEditedReport(initialReport)
+      // Initialize history with the loaded report
+      setEditHistory([initialReport])
+      setHistoryIndex(0)
       setStatus(data.status || 'draft')
       setUseForTraining(data.use_for_training || false)
       setSelectedStudentId(data.student_id || '')
@@ -230,6 +264,52 @@ function EditReport() {
       console.error('Error deleting report:', error)
       alert('Error deleting report. Please try again.')
     }
+  }
+
+  // Undo/Redo handlers
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      setIsUndoRedoAction(true)
+      const newIndex = historyIndex - 1
+      setHistoryIndex(newIndex)
+      setEditedReport(editHistory[newIndex])
+      console.log('↩️ Undo to version', newIndex)
+    }
+  }
+
+  const handleRedo = () => {
+    if (historyIndex < editHistory.length - 1) {
+      setIsUndoRedoAction(true)
+      const newIndex = historyIndex + 1
+      setHistoryIndex(newIndex)
+      setEditedReport(editHistory[newIndex])
+      console.log('↪️ Redo to version', newIndex)
+    }
+  }
+
+  const addToHistory = (newText) => {
+    if (isUndoRedoAction) {
+      setIsUndoRedoAction(false)
+      return
+    }
+
+    // Don't add to history if text hasn't meaningfully changed
+    if (editHistory[historyIndex] === newText) {
+      return
+    }
+
+    // Remove any history after current index (if we edited after undoing)
+    const newHistory = editHistory.slice(0, historyIndex + 1)
+    newHistory.push(newText)
+    
+    // Keep only last 50 states to avoid memory issues
+    if (newHistory.length > 50) {
+      newHistory.shift()
+    } else {
+      setHistoryIndex(historyIndex + 1)
+    }
+    
+    setEditHistory(newHistory)
   }
 
   const handleRegenerate = async (instructions = '') => {
@@ -400,6 +480,22 @@ function EditReport() {
         ))}
       </>
     )
+  }
+
+  const renderEditableWithHighlights = (markedText, originalText) => {
+    // Convert [[ADDED: ...]] markers to HTML with green highlights
+    // For now, keep it simple and just show additions in green
+    let html = markedText
+    const regex = /\[\[ADDED:\s*(.*?)\s*\]\]/g
+    html = html.replace(regex, '<span class="bg-emerald-200 text-gray-900" contenteditable="true">$1</span>')
+    
+    return html
+  }
+
+  const handleContentEditableChange = (e) => {
+    // Extract plain text from contentEditable div
+    const newText = e.currentTarget.textContent
+    setEditableExpandedText(newText)
   }
 
   const handleAcceptExpand = () => {
@@ -797,6 +893,26 @@ function EditReport() {
                 {autoSaveStatus === 'error' && (
                   <span className="text-xs text-red-600 italic">⚠ Save failed</span>
                 )}
+                
+                {/* Undo/Redo buttons */}
+                <div className="flex gap-1 ml-2">
+                  <button
+                    onClick={handleUndo}
+                    disabled={historyIndex <= 0}
+                    className="p-1.5 text-sage-600 hover:bg-sage-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <Undo2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleRedo}
+                    disabled={historyIndex >= editHistory.length - 1}
+                    className="p-1.5 text-sage-600 hover:bg-sage-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Redo (Ctrl+Y)"
+                  >
+                    <Redo2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               <div className="flex space-x-2">
                 <button
@@ -823,7 +939,18 @@ function EditReport() {
             <textarea
               ref={textareaRef}
               value={editedReport}
-              onChange={(e) => setEditedReport(e.target.value)}
+              onChange={(e) => {
+                const newValue = e.target.value
+                setEditedReport(newValue)
+                
+                // Debounce history additions - only add after 1 second of no typing
+                if (historyTimerRef.current) {
+                  clearTimeout(historyTimerRef.current)
+                }
+                historyTimerRef.current = setTimeout(() => {
+                  addToHistory(newValue)
+                }, 1000)
+              }}
               onSelect={(e) => {
                 const start = e.target.selectionStart
                 const end = e.target.selectionEnd
@@ -1363,7 +1490,7 @@ function EditReport() {
                 </div>
               </div>
               
-              {/* Expanded - Editable */}
+              {/* Expanded - Editable with Highlights */}
               <div className="flex flex-col">
                 <h4 className="text-sm font-semibold text-emerald-700 mb-3 flex items-center gap-2">
                   Expanded (More Detail) - Editable
@@ -1371,15 +1498,25 @@ function EditReport() {
                     ✏️ Edit before accepting
                   </span>
                 </h4>
-                <textarea
-                  value={editableExpandedText}
-                  onChange={(e) => setEditableExpandedText(e.target.value)}
-                  className="flex-1 bg-white p-4 rounded-lg border-2 border-emerald-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm text-gray-800 leading-relaxed resize-none"
-                  placeholder="Edit the expanded version..."
+                <div
+                  ref={expandedEditableRef}
+                  contentEditable
+                  onInput={handleContentEditableChange}
+                  dangerouslySetInnerHTML={{ 
+                    __html: expandedVersion.marked_text 
+                      ? renderEditableWithHighlights(expandedVersion.marked_text, 
+                          expandingSectionOnly 
+                            ? originalBeforeExpand.substring(sectionPosition.start, sectionPosition.end)
+                            : originalBeforeExpand
+                        )
+                      : editableExpandedText 
+                  }}
+                  className="flex-1 overflow-y-auto bg-white p-4 rounded-lg border-2 border-emerald-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap"
+                  style={{ minHeight: '300px' }}
                 />
                 {expandedVersion.additions && expandedVersion.additions.length > 0 && (
                   <p className="mt-2 text-xs text-emerald-600">
-                    ✨ {expandedVersion.additions.length} new section{expandedVersion.additions.length > 1 ? 's' : ''} added (you can edit above)
+                    ✨ {expandedVersion.additions.length} new section{expandedVersion.additions.length > 1 ? 's' : ''} added (highlighted in green - you can edit them)
                   </p>
                 )}
               </div>
